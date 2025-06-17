@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #222;
+            color: #fff;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background: #4CAF50; }
+        .error { background: #f44336; }
+        .info { background: #2196F3; }
+    </style>
+</head>
+<body>
+    <h1>Audio Debug Test</h1>
+    
+    <div id="status" class="status info">Ready to test audio...</div>
+    
+    <button onclick="testAudio()">Test Audio Loading</button>
+    <button onclick="playAudio()">Play Audio</button>
+    <button onclick="stopAudio()">Stop Audio</button>
+    
+    <div id="log"></div>
+    
+    <script>
+        let testAudio = null;
+        const statusDiv = document.getElementById('status');
+        const logDiv = document.getElementById('log');
+        
+        function log(message, type = 'info') {
+            console.log(message);
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div class="status ${type}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        window.testAudio = function() {
+            log('Testing audio file loading...', 'info');
+            
+            try {
+                testAudio = new Audio();
+                testAudio.src = "SpotiDownloader.com - Adagio Op.87 – Between Echo and Ash - Erik J. Lindström.mp3";
+                testAudio.loop = true;
+                testAudio.volume = 0.5;
+                testAudio.preload = 'auto';
+                
+                testAudio.addEventListener('canplaythrough', () => {
+                    log('✅ Audio file loaded successfully!', 'success');
+                    updateStatus('Audio loaded - ready to play!', 'success');
+                });
+                
+                testAudio.addEventListener('error', (e) => {
+                    log('❌ Audio file failed to load: ' + e.message, 'error');
+                    updateStatus('Audio loading failed!', 'error');
+                });
+                
+                testAudio.addEventListener('loadstart', () => {
+                    log('📥 Starting to load audio...', 'info');
+                    updateStatus('Loading audio file...', 'info');
+                });
+                
+                log('Audio object created, waiting for load...', 'info');
+                
+            } catch (error) {
+                log('❌ Error creating audio object: ' + error.message, 'error');
+                updateStatus('Failed to create audio object!', 'error');
+            }
+        };
+        
+        window.playAudio = function() {
+            if (!testAudio) {
+                log('⚠️ Please test audio loading first!', 'error');
+                return;
+            }
+            
+            testAudio.play().then(() => {
+                log('▶️ Audio playing successfully!', 'success');
+                updateStatus('Audio is playing!', 'success');
+            }).catch(e => {
+                log('❌ Failed to play audio: ' + e.message, 'error');
+                updateStatus('Playback failed!', 'error');
+            });
+        };
+        
+        window.stopAudio = function() {
+            if (testAudio) {
+                testAudio.pause();
+                testAudio.currentTime = 0;
+                log('⏹️ Audio stopped', 'info');
+                updateStatus('Audio stopped', 'info');
+            }
+        };
+        
+        // Auto-test on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🚀 Debug page loaded', 'info');
+        });
+    </script>
+</body>
+</html> 

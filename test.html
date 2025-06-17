@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thorne's Journey - Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: #111;
+            margin-top: 20px;
+        }
+        #status {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+        }
+        #error {
+            color: #ff4444;
+            background: #331111;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Loading game...</div>
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    <div id="error"></div>
+    
+    <script>
+        // Error handling
+        window.addEventListener('error', function(e) {
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error').innerHTML = 'Error: ' + e.message + '<br>Line: ' + e.lineno + '<br>File: ' + e.filename;
+            document.getElementById('status').innerHTML = 'Game failed to load - check error below';
+        });
+        
+        // Check if canvas is working
+        const testCanvas = document.getElementById('gameCanvas');
+        if (testCanvas) {
+            const testCtx = testCanvas.getContext('2d');
+            if (testCtx) {
+                document.getElementById('status').innerHTML = 'Canvas OK - Loading game script...';
+            } else {
+                document.getElementById('status').innerHTML = 'Canvas context failed!';
+            }
+        } else {
+            document.getElementById('status').innerHTML = 'Canvas element not found!';
+        }
+    </script>
+    
+    <script src="game.js"></script>
+    
+    <script>
+        // Check if game loaded
+        setTimeout(function() {
+            if (typeof gameState !== 'undefined') {
+                document.getElementById('status').innerHTML = 'Game loaded successfully! Current state: ' + gameState.current;
+            } else {
+                document.getElementById('status').innerHTML = 'Game script loaded but gameState not found';
+            }
+        }, 1000);
+    </script>
+</body>
+</html> 

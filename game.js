@@ -1,78 +1,124 @@
-// Game Canvas Setup
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// ========================================
+// THORNE'S JOURNEY - Game.js Rewrite
+// Version 2.0 - Simplified & Optimized
+// 
+// A Dark Souls-inspired adventure following Thorne's
+// search for his daughter Aila in the mysterious Verge
+//
+// Features:
+// - Complete gameplay with combat and platforming
+// - Story integration with dialogue system
+// - Audio system with Prokofiev background music
+// - Visual effects and particle system
+// - Professional UI with multiple game states
+// ========================================
 
-// Audio Setup
-const audioManager = {
-    bgMusic: null,
-    bossMusic: null,
-    soundEnabled: true,
-    currentTrack: 'normal',
-    initialized: false,
-    
+// Canvas Setup
+const canvas = document.getElementById('gameCanvas');
+if (!canvas) {
+    throw new Error('Canvas element with id "gameCanvas" not found!');
+}
+const ctx = canvas.getContext('2d');
+if (!ctx) {
+    throw new Error('2D canvas context not supported!');
+}
+
+// Essential Game Constants
+const GAME_CONFIG = {
+    GRAVITY: 0.5,
+    PLAYER_SPEED: 5,
+    JUMP_FORCE: -12,
+    CANVAS_WIDTH: 800,
+    CANVAS_HEIGHT: 450,
+    TARGET_FPS: 60,
+    ATTACK_RANGE: 50,
+    ATTACK_DURATION: 20,
+    INVINCIBILITY_TIME: 60
+};
+
+// Color Palette
+const COLORS = {
+    BACKGROUND: '#111122',
+    BACKGROUND_ACCENT: '#222233',
+    PLATFORM: '#555555',
+    PLATFORM_EDGE: '#777777',
+    PLAYER: '#FFFFFF',
+    PLAYER_ATTACK: '#FFAA00',
+    PLAYER_INVINCIBLE: '#AAAAFF',
+    ENEMY: '#FF4444',
+    ENEMY_DAMAGED: '#FF8888',
+    ENEMY_ATTACK: '#FF6666',
+    UI_TEXT: '#FFFFFF',
+    UI_ACCENT: '#AAAAFF',
+    HEALTH: '#FF0000',
+    PARTICLE: '#FFCC66',
+    BACKGROUND_PARTICLE: '#444455'
+};
+
+// Game State Management
+const gameState = {
+    current: 'menu', // 'menu', 'playing', 'paused', 'gameOver', 'dialogue'
+    isPaused: false,
+    playerHealth: 3,
+    maxHealth: 3,
+    currentChapter: 1, // Changed to numeric for combat system
+    inDialogue: false,
+    enemiesDefeated: 0,
+    souls: 0,
+    debugMode: false,
+    screenFlash: null,
+    chapterProgress: {
+        1: { completed: false, parrySuccessRate: 0, enemiesDefeated: 0, title: "First Steps" },
+        2: { completed: false, parrySuccessRate: 0, enemiesDefeated: 0, title: "Rhythm and Timing" },
+        3: { completed: false, parrySuccessRate: 0, enemiesDefeated: 0, title: "Spatial Awareness" },
+        4: { completed: false, parrySuccessRate: 0, enemiesDefeated: 0, title: "Combat Flow" },
+        5: { completed: false, parrySuccessRate: 0, enemiesDefeated: 0, title: "Master of Arms" }
+    }
+};
+
+// ========================================
+// AUDIO SYSTEM
+// ========================================
+
+class AudioManager {
+    constructor() {
+        this.bgMusic = null;
+        this.soundEnabled = true;
+        this.musicVolume = 0.3;
+        this.initialized = false;
+        this.userInteracted = false;
+    }
+
     init() {
-        // Create background music element - using local audio file
-        this.bgMusic = new Audio("thornes' thorn.mp3");
-        this.bgMusic.loop = true;
-        this.bgMusic.volume = 0.4;
-        
-        // Create boss battle music - using same file with different volume for variety
-        this.bossMusic = new Audio("thornes' thorn.mp3");
-        this.bossMusic.loop = true;
-        this.bossMusic.volume = 0.6; // Slightly louder for boss battles
-        
-        this.initialized = true;
-        
-        // Start playing if enabled
-        if (this.soundEnabled) {
-            this.playMusic();
-        }
-    },
-    
-    playMusic() {
-        if (!this.soundEnabled || !this.initialized) return;
-        
         try {
-            if (this.currentTrack === 'normal') {
-                this.bossMusic.pause();
-                this.bgMusic.play().catch(e => {
-                    console.log("Audio couldn't autoplay: User interaction required first");
-                });
-            } else if (this.currentTrack === 'boss') {
-                this.bgMusic.pause();
-                this.bossMusic.play().catch(e => {
-                    console.log("Audio couldn't autoplay: User interaction required first");
-                });
-            }
+            // Create background music
+            this.bgMusic = new Audio();
+            this.bgMusic.src = "SpotiDownloader.com - Adagio Op.87 – Between Echo and Ash - Erik J. Lindström.mp3";
+            this.bgMusic.loop = true;
+            this.bgMusic.volume = this.musicVolume;
+            this.bgMusic.preload = 'auto';
+            
+            this.initialized = true;
+            console.log('Audio system initialized');
         } catch (error) {
-            console.warn("Audio playback error:", error);
-            // Continue game without audio if there's an error
+            console.warn('Audio initialization failed:', error);
         }
-    },
-    
-    switchToBossMusic() {
-        if (this.currentTrack !== 'boss') {
-            this.currentTrack = 'boss';
-            this.playMusic();
-        }
-    },
-    
-    switchToNormalMusic() {
-        if (this.currentTrack !== 'normal') {
-            this.currentTrack = 'normal';
-            this.playMusic();
-        }
-    },
-    
+    }
+
+    playMusic() {
+        if (!this.soundEnabled || !this.initialized || !this.bgMusic) return;
+        
+        this.bgMusic.play().catch(e => {
+            console.log('Music autoplay blocked - waiting for user interaction');
+        });
+    }
+
     pauseMusic() {
         if (this.bgMusic) {
             this.bgMusic.pause();
         }
-        if (this.bossMusic) {
-            this.bossMusic.pause();
-        }
-    },
-    
+    }
+
     toggleSound() {
         this.soundEnabled = !this.soundEnabled;
         if (this.soundEnabled) {
@@ -80,180 +126,345 @@ const audioManager = {
         } else {
             this.pauseMusic();
         }
-    },
-    
-    // Sound button UI
-    drawSoundButton() {
-        // Draw button background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.beginPath();
-        ctx.arc(canvas.width - SOUND_BUTTON_X_OFFSET, SOUND_BUTTON_Y_OFFSET, SOUND_BUTTON_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
+    }
+
+    // Enhanced attack sound system using Web Audio API
+    playAttackSound(type = 'slash') {
+        if (!this.soundEnabled) return;
         
-        // Draw sound icon or muted icon
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        
-        if (this.soundEnabled) {
-            // Sound on icon
-            ctx.moveTo(canvas.width - 35, 30);
-            ctx.lineTo(canvas.width - 30, 25);
-            ctx.lineTo(canvas.width - 30, 35);
-            ctx.lineTo(canvas.width - 35, 30);
-            ctx.fill();
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
             
-            // Sound waves
-            ctx.beginPath();
-            ctx.arc(canvas.width - 27, 30, 5, -Math.PI / 3, Math.PI / 3);
-            ctx.stroke();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
             
-            ctx.beginPath();
-            ctx.arc(canvas.width - 25, 30, 10, -Math.PI / 3, Math.PI / 3);
-            ctx.stroke();
-        } else {
-            // Sound off icon (crossed speaker)
-            ctx.moveTo(canvas.width - 35, 30);
-            ctx.lineTo(canvas.width - 30, 25);
-            ctx.lineTo(canvas.width - 30, 35);
-            ctx.lineTo(canvas.width - 35, 30);
-            ctx.fill();
+            // Different sounds for different attack types
+            switch (type) {
+                case 'slash':
+                    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                    break;
+                    
+                case 'thrust':
+                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.08);
+                    gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.08);
+                    oscillator.stop(audioContext.currentTime + 0.08);
+                    break;
+                    
+                case 'aoe':
+                case 'cone':
+                    oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
+                    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                    break;
+                    
+                case 'charge':
+                    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.15);
+                    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.4);
+                    gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+                    oscillator.stop(audioContext.currentTime + 0.4);
+                    break;
+                    
+                case 'groundSlam':
+                    oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 0.5);
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                    oscillator.stop(audioContext.currentTime + 0.5);
+                    break;
+                    
+                case 'riposte':
+                    // Enhanced attack sound for riposte
+                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.05);
+                    oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.15);
+                    gainNode.gain.setValueAtTime(0.35, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+                    oscillator.stop(audioContext.currentTime + 0.15);
+                    break;
+                    
+                case 'parry_attempt':
+                    oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
+                    oscillator.frequency.linearRampToValueAtTime(500, audioContext.currentTime + 0.05);
+                    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+                    oscillator.stop(audioContext.currentTime + 0.05);
+                    break;
+                    
+                case 'parry_perfect':
+                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                    oscillator.frequency.linearRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                    oscillator.stop(audioContext.currentTime + 0.2);
+                    break;
+                    
+                case 'parry_good':
+                    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+                    oscillator.frequency.linearRampToValueAtTime(900, audioContext.currentTime + 0.08);
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+                    oscillator.stop(audioContext.currentTime + 0.15);
+                    break;
+                    
+                case 'parry_fail':
+                    oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.2);
+                    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                    oscillator.stop(audioContext.currentTime + 0.2);
+                    break;
+                    
+                default:
+                    // Default slash sound
+                    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                    oscillator.stop(audioContext.currentTime + 0.1);
+            }
             
-            // X mark
-            ctx.beginPath();
-            ctx.moveTo(canvas.width - 25, 25);
-            ctx.lineTo(canvas.width - 20, 35);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.moveTo(canvas.width - 25, 35);
-            ctx.lineTo(canvas.width - 20, 25);
-            ctx.stroke();
+            oscillator.start(audioContext.currentTime);
+        } catch (error) {
+            console.warn('Could not play attack sound:', error);
         }
-    },
+    }
+
+    // Enable audio on first user interaction
+    enableAudio() {
+        if (!this.userInteracted) {
+            this.userInteracted = true;
+            if (this.soundEnabled && gameState.current === 'playing') {
+                this.playMusic();
+            }
+        }
+    }
+}
+
+// Create audio manager instance
+// Add parry sound method to AudioManager
+AudioManager.prototype.playParrySound = function(quality = 'good') {
+    if (!this.soundEnabled || !this.audioContext) return;
     
-    // Check if click is on sound button
-    isSoundButtonClicked(x, y) {
-        const deltaX = x - (canvas.width - SOUND_BUTTON_X_OFFSET);
-        const deltaY = y - SOUND_BUTTON_Y_OFFSET;
+    try {
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
         
-        // Prevent potential division by zero or invalid calculations
-        if (!isFinite(deltaX) || !isFinite(deltaY)) return false;
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
         
-        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-        return distance <= SOUND_BUTTON_RADIUS;
+        // Different sounds for different parry qualities
+        switch (quality) {
+            case 'perfect':
+                oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(1200, this.audioContext.currentTime + 0.1);
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.4, this.audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.3);
+                oscillator.stop(this.audioContext.currentTime + 0.3);
+                break;
+                
+            case 'good':
+                oscillator.frequency.setValueAtTime(600, this.audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, this.audioContext.currentTime + 0.2);
+                oscillator.type = 'triangle';
+                gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.3, this.audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.2);
+                oscillator.stop(this.audioContext.currentTime + 0.2);
+                break;
+                
+            case 'failed':
+                oscillator.frequency.setValueAtTime(200, this.audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(100, this.audioContext.currentTime + 0.15);
+                oscillator.type = 'sawtooth';
+                gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.2, this.audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.15);
+                oscillator.stop(this.audioContext.currentTime + 0.15);
+                break;
+        }
+        
+        oscillator.start(this.audioContext.currentTime);
+        
+    } catch (error) {
+        console.warn('Parry sound error:', error);
     }
 };
 
-// Game Constants
-const GRAVITY = 0.5;
-const JUMP_FORCE = -12;
-const PLAYER_SPEED = 5;
-const ATTACK_DURATION = 15;
-const DASH_SPEED = 12;
-const DASH_DURATION = 15;
-const DASH_COOLDOWN = 40;
+const audioManager = new AudioManager();
 
-// UI Constants
-const SOUND_BUTTON_RADIUS = 20;
-const SOUND_BUTTON_X_OFFSET = 30;
-const SOUND_BUTTON_Y_OFFSET = 30;
-const DIALOGUE_BOX_MARGIN = 50;
-const DIALOGUE_BOX_HEIGHT = 120;
-const HUD_MARGIN = 20;
+// ========================================
+// PARTICLE SYSTEM
+// ========================================
 
-// Performance Constants
-const MAX_VISUAL_EFFECTS = 20;
-const TARGET_FPS = 60;
+class Particle {
+    constructor(x, y, velocityX, velocityY, color, life, size = 2) {
+        this.x = x;
+        this.y = y;
+        this.velocityX = velocityX;
+        this.velocityY = velocityY;
+        this.color = color;
+        this.life = life;
+        this.maxLife = life;
+        this.size = size;
+        this.gravity = 0.1;
+    }
 
-// Story Constants
-const CHAPTERS = {
-    INTRO: "intro",
-    ASH_CHAPEL: "ash_chapel",
-    BRIDGE: "bridge",
-    WHISPERING_ROOM: "whispering_room",
-    EIDOLON_TREE: "eidolon_tree",
-    VOICE_MANIFESTATION: "voice_manifestation",
-    LAMENT_GATE: "lament_gate",
-    FOLDED_THRONE: "folded_throne"
-};
+    update() {
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        this.velocityY += this.gravity;
+        this.life--;
+        
+        // Fade out over time
+        this.alpha = this.life / this.maxLife;
+        
+        return this.life > 0;
+    }
 
-// Emotional States
-const EMOTIONS = {
-    TRUTH: "truth",
-    REGRET: "regret",
-    FURY: "fury"
-};
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
 
-// Game State
-const gameState = {
-    paused: false,
-    gameOver: false,
-    escapeKeyPressed: false,
-    inDialogue: false,
-    currentChapter: CHAPTERS.INTRO,
-    emotionalInventory: {
-        [EMOTIONS.TRUTH]: 0,
-        [EMOTIONS.REGRET]: 0,
-        [EMOTIONS.FURY]: 0
-    },
-    hasEncounteredKas: false,
-    hasFoundMemoryPage: false,
-    chapterProgress: 0
-};
+// Particle manager
+const particles = [];
 
-// Assets - placeholder colors for now
-const COLORS = {
-    PLAYER: '#FFFFFF',
-    PLAYER_DASH: '#AAAAFF',
-    PLAYER_ATTACK: '#FF8866',
-    ENEMY: '#FF0000',
-    PLATFORM: '#555555',
-    BACKGROUND_1: '#111122',
-    BACKGROUND_2: '#222233',
-    HEALTH: '#FF0000',
-    SOUL: '#AAAAFF',
-    DIALOGUE_BG: 'rgba(0, 0, 0, 0.7)',
-    DIALOGUE_TEXT: '#FFFFFF',
-    DIALOGUE_NAME: '#AAAAFF',
-    VERGE_CORRUPTION: '#550055'
-};
+function createAttackParticles(x, y, direction) {
+    for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI / 4) * i + (direction > 0 ? 0 : Math.PI);
+        const speed = 2 + Math.random() * 3;
+        particles.push(new Particle(
+            x, y,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed - 1,
+            COLORS.PARTICLE,
+            20 + Math.random() * 10,
+            1 + Math.random() * 2
+        ));
+    }
+}
 
-// Story characters
-const CHARACTERS = {
-    THORNE: "Thorne",
-    AILA: "Aila (Echo)",
-    KAS: "Kas Vire",
-    VOICE_TRUTH: "Voice of Truth",
-    VOICE_REGRET: "Voice of Regret",
-    VOICE_FURY: "Voice of Fury",
-    ASHLAN: "Ashlan",
-    VOICE_FOLD: "Voice of the Fold"
-};
+function createDamageParticles(x, y) {
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 2;
+        particles.push(new Particle(
+            x, y,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed - 1,
+            COLORS.HEALTH,
+            15 + Math.random() * 10,
+            2 + Math.random() * 2
+        ));
+    }
+}
 
-// Dialogue System
+function updateParticles() {
+    // Limit particle count for performance
+    if (particles.length > 50) {
+        particles.splice(0, particles.length - 50);
+    }
+    
+    for (let i = particles.length - 1; i >= 0; i--) {
+        if (i >= 0 && i < particles.length && !particles[i].update()) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function drawParticles() {
+    particles.forEach(particle => particle.draw());
+}
+
+function createEnemyDeathParticles(x, y) {
+    // Large explosion particles
+    for (let i = 0; i < 15; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 5;
+        const velocityX = Math.cos(angle) * speed;
+        const velocityY = Math.sin(angle) * speed;
+        
+        particles.push(new Particle(
+            x + (Math.random() - 0.5) * 20, 
+            y + (Math.random() - 0.5) * 20,
+            velocityX, velocityY,
+            '#FF6B6B', // Red explosion color
+            40 + Math.random() * 30,
+            4 + Math.random() * 3
+        ));
+    }
+    
+    // Secondary white flash particles
+    for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 * i) / 8;
+        const speed = 4 + Math.random() * 2;
+        const velocityX = Math.cos(angle) * speed;
+        const velocityY = Math.sin(angle) * speed;
+        
+        particles.push(new Particle(
+            x, y,
+            velocityX, velocityY,
+            '#FFFFFF',
+            20 + Math.random() * 15,
+            2
+        ));
+    }
+}
+
+function createSoulRewardParticles(x, y, amount) {
+    // Golden soul particles that float upward
+    for (let i = 0; i < amount; i++) {
+        const offsetX = (Math.random() - 0.5) * 30;
+        const offsetY = (Math.random() - 0.5) * 10;
+        const velocityX = (Math.random() - 0.5) * 2;
+        const velocityY = -2 - Math.random() * 2; // Float upward
+        
+        particles.push(new Particle(
+            x + offsetX, 
+            y + offsetY,
+            velocityX, velocityY,
+            '#FFD700', // Golden color
+            60 + Math.random() * 30,
+            2 + Math.random()
+        ));
+    }
+}
+
+// ========================================
+// DIALOGUE SYSTEM
+// ========================================
+
 class DialogueSystem {
     constructor() {
-        this.dialogueQueue = [];
         this.currentDialogue = null;
-        this.textSpeed = 2;
+        this.dialogueQueue = [];
         this.textProgress = 0;
-        this.dialogueComplete = false;
-        this.currentChoices = null;
-        this.selectedChoice = 0;
-        this.choiceAreas = []; // Store clickable areas for choices
+        this.textSpeed = 2;
+        this.isComplete = false;
     }
 
-    addDialogue(character, text, emotion = null, choices = null) {
-        this.dialogueQueue.push({ character, text, emotion, choices });
-        if (!this.currentDialogue) {
-            this.nextDialogue();
-        }
-    }
-
-    addDialogueSequence(dialogueArray) {
-        dialogueArray.forEach(dialogue => {
-            this.dialogueQueue.push(dialogue);
-        });
+    addDialogue(character, text) {
+        this.dialogueQueue.push({ character, text });
         if (!this.currentDialogue) {
             this.nextDialogue();
         }
@@ -263,31 +474,21 @@ class DialogueSystem {
         if (this.dialogueQueue.length > 0) {
             this.currentDialogue = this.dialogueQueue.shift();
             this.textProgress = 0;
-            this.dialogueComplete = false;
-            this.currentChoices = this.currentDialogue.choices;
-            this.selectedChoice = 0;
-            this.choiceAreas = []; // Reset clickable areas
+            this.isComplete = false;
             gameState.inDialogue = true;
         } else {
             this.currentDialogue = null;
-            this.currentChoices = null;
-            this.choiceAreas = []; // Reset clickable areas
             gameState.inDialogue = false;
-            
-            // Reset space key state to prevent jumping after dialogue
-            keys['Space'] = false;
-            keys.spacePressed = false;
-            player.jumpKeyPressed = false;
         }
     }
 
     update() {
         if (!this.currentDialogue) return;
 
-        if (!this.dialogueComplete) {
+        if (!this.isComplete) {
             this.textProgress += this.textSpeed;
             if (this.textProgress >= this.currentDialogue.text.length) {
-                this.dialogueComplete = true;
+                this.isComplete = true;
                 this.textProgress = this.currentDialogue.text.length;
             }
         }
@@ -296,443 +497,144 @@ class DialogueSystem {
     draw() {
         if (!this.currentDialogue) return;
 
-        // Draw dialogue box
-        ctx.fillStyle = COLORS.DIALOGUE_BG;
+        // Dialogue box background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
         ctx.fillRect(50, canvas.height - 150, canvas.width - 100, 120);
+        
+        // Border
+        ctx.strokeStyle = COLORS.UI_ACCENT;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(50, canvas.height - 150, canvas.width - 100, 120);
 
-        // Draw character name
-        ctx.fillStyle = COLORS.DIALOGUE_NAME;
+        // Character name
+        ctx.fillStyle = COLORS.UI_ACCENT;
         ctx.font = '18px Arial';
         ctx.textAlign = 'left';
         ctx.fillText(this.currentDialogue.character, 70, canvas.height - 120);
 
-        // Draw text (animated)
-        ctx.fillStyle = COLORS.DIALOGUE_TEXT;
+        // Dialogue text (animated)
+        ctx.fillStyle = COLORS.UI_TEXT;
         ctx.font = '16px Arial';
-        
         const displayText = this.currentDialogue.text.substring(0, Math.floor(this.textProgress));
         
-        // Word wrap for dialogue text
-        const wrapText = (text, x, y, maxWidth, lineHeight) => {
-            const words = text.split(' ');
-            let line = '';
-            let testLine = '';
-            let lineCount = 0;
+        // Word wrap
+        this.wrapText(displayText, 70, canvas.height - 95, canvas.width - 140, 20);
 
-            for (let n = 0; n < words.length; n++) {
-                testLine = line + words[n] + ' ';
-                const metrics = ctx.measureText(testLine);
-                const testWidth = metrics.width;
-                
-                if (testWidth > maxWidth && n > 0) {
-                    ctx.fillText(line, x, y + (lineCount * lineHeight));
-                    line = words[n] + ' ';
-                    lineCount++;
-                } else {
-                    line = testLine;
-                }
-            }
+        // Continue indicator
+        if (this.isComplete) {
+            ctx.fillStyle = COLORS.UI_ACCENT;
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText('Press SPACE to continue...', canvas.width - 70, canvas.height - 40);
+        }
+    }
+
+    wrapText(text, x, y, maxWidth, lineHeight) {
+        const words = text.split(' ');
+        let line = '';
+        let lineCount = 0;
+
+        for (let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' ';
+            const metrics = ctx.measureText(testLine);
             
-            ctx.fillText(line, x, y + (lineCount * lineHeight));
-            return lineCount;
-        };
-        
-        wrapText(displayText, 70, canvas.height - 100, canvas.width - 140, 22);
-
-        // Draw "continue" indicator if dialogue is complete
-        if (this.dialogueComplete) {
-            // If there are choices, draw them
-            if (this.currentChoices && this.currentChoices.length > 0) {
-                this.choiceAreas = []; // Reset choice areas
-                for (let i = 0; i < this.currentChoices.length; i++) {
-                    const isSelected = i === this.selectedChoice;
-                    ctx.fillStyle = isSelected ? '#FFCC00' : COLORS.DIALOGUE_TEXT;
-                    
-                    // Calculate text position
-                    const x = 70;
-                    const y = canvas.height - 50 + (i * 25);
-                    const choiceText = `${i + 1}. ${this.currentChoices[i].text}`;
-                    
-                    // Draw choice text
-                    ctx.fillText(choiceText, x, y);
-                    
-                    // Store clickable area for this choice
-                    const textWidth = ctx.measureText(choiceText).width;
-                    this.choiceAreas.push({
-                        x: x - 5,
-                        y: y - 15,
-                        width: textWidth + 10,
-                        height: 20,
-                        index: i
-                    });
-                    
-                    // Draw hover effect (subtle rectangle behind text)
-                    if (isSelected) {
-                        ctx.fillStyle = 'rgba(255, 204, 0, 0.2)';
-                        ctx.fillRect(x - 5, y - 15, textWidth + 10, 20);
-                    }
-                }
+            if (metrics.width > maxWidth && n > 0) {
+                ctx.fillText(line, x, y + (lineCount * lineHeight));
+                line = words[n] + ' ';
+                lineCount++;
             } else {
-                // Otherwise, show continue prompt
-                ctx.fillStyle = '#FFCC00';
-                ctx.font = '14px Arial';
-                ctx.textAlign = 'right';
-                ctx.fillText('Click or press SPACE to continue...', canvas.width - 70, canvas.height - 40);
-                
-                // Add clickable area for continuing
-                this.choiceAreas = [{
-                    x: canvas.width - 250,
-                    y: canvas.height - 55,
-                    width: 180,
-                    height: 20,
-                    index: -1 // Special index for "continue"
-                }];
+                line = testLine;
             }
         }
+        ctx.fillText(line, x, y + (lineCount * lineHeight));
     }
 
-    // Check if a point is inside a choice area
-    isPointInChoice(x, y) {
-        for (const area of this.choiceAreas) {
-            if (x >= area.x && x <= area.x + area.width &&
-                y >= area.y && y <= area.y + area.height) {
-                return area.index;
-            }
-        }
-        return null;
-    }
-
-    handleInput(keys) {
-        if (!this.currentDialogue || !this.dialogueComplete) return;
-
-        // Handle dialogue choices
-        if (this.currentChoices && this.currentChoices.length > 0) {
-            // Navigate choices
-            if (keys['ArrowUp'] && !keys.arrowUpPressed) {
-                this.selectedChoice = (this.selectedChoice - 1 + this.currentChoices.length) % this.currentChoices.length;
-                keys.arrowUpPressed = true;
-            }
-            if (keys['ArrowDown'] && !keys.arrowDownPressed) {
-                this.selectedChoice = (this.selectedChoice + 1) % this.currentChoices.length;
-                keys.arrowDownPressed = true;
-            }
-            
-            // Select choice
-            if (keys['Space'] && !keys.spacePressed) {
-                // Execute the choice's effect
-                const choice = this.currentChoices[this.selectedChoice];
-                if (choice.effect) {
-                    choice.effect();
-                }
-                keys.spacePressed = true;
-                this.nextDialogue();
-            }
-        } else {
-            // Just continue to next dialogue
-            if (keys['Space'] && !keys.spacePressed) {
-                keys.spacePressed = true;
-                this.nextDialogue();
-            }
-        }
-    }
-
-    // Handle mouse click for dialogue choices
-    handleMouseClick(x, y) {
-        if (!this.currentDialogue || !this.dialogueComplete) return false;
+    handleInput() {
+        if (!this.currentDialogue) return;
         
-        const choiceIndex = this.isPointInChoice(x, y);
-        
-        if (choiceIndex !== null) {
-            if (choiceIndex === -1) {
-                // Clicked on "continue"
-                this.nextDialogue();
-            } else if (this.currentChoices && this.currentChoices.length > 0) {
-                // Clicked on a choice
-                const choice = this.currentChoices[choiceIndex];
-                if (choice.effect) {
-                    choice.effect();
-                }
-                this.nextDialogue();
-            }
-            return true;
+        if (this.isComplete && (keyPressed['Space'] || keyPressed['Enter'])) {
+            this.nextDialogue();
         }
-        
-        return false;
     }
 }
 
-// Game Story Manager
-class StoryManager {
-    constructor(dialogueSystem) {
-        this.dialogueSystem = dialogueSystem;
-        this.storyEvents = {};
-        this.setupStoryEvents();
-    }
+// Story chapters and dialogue
+const CHAPTERS = {
+    INTRO: 'intro',
+    ASH_CHAPEL: 'ash_chapel',
+    BRIDGE: 'bridge',
+    VICTORY: 'victory'
+};
 
-    spawnChapterEnemies() {
-        // Clear existing enemies
-        enemies = [];
-        
-        // Spawn enemies based on current chapter
-        switch(gameState.currentChapter) {
-            case CHAPTERS.ASH_CHAPEL:
-                enemies.push(
-                    new Enemy(100, 100, 'verge'),
-                    new Enemy(400, 200, 'memory'),
-                    new Enemy(600, 150, 'verge')
-                );
-                break;
-            case CHAPTERS.BRIDGE:
-                enemies.push(
-                    new Enemy(200, 150, 'voice'),
-                    new Enemy(450, 250, 'verge'),
-                    new Enemy(700, 200, 'memory'),
-                    new Enemy(300, 100, 'voice')
-                );
-                break;
-            case CHAPTERS.WHISPERING_ROOM:
-                enemies.push(
-                    new Enemy(150, 200, 'memory'),
-                    new Enemy(350, 150, 'verge'),
-                    new Enemy(550, 250, 'voice'),
-                    new Enemy(250, 100, 'memory'),
-                    new Enemy(650, 150, 'verge')
-                );
-                break;
-            case CHAPTERS.EIDOLON_TREE:
-                enemies.push(
-                    new Enemy(180, 120, 'voice'),
-                    new Enemy(320, 180, 'memory'),
-                    new Enemy(480, 220, 'verge'),
-                    new Enemy(620, 160, 'voice'),
-                    new Enemy(380, 100, 'memory'),
-                    new Enemy(520, 140, 'verge')
-                );
-                break;
-            // Add more chapters with their specific enemy configurations
-            default:
-                // Default enemies for other chapters
-                enemies.push(
-                    new Enemy(100, 100, 'verge'),
-                    new Enemy(400, 200, 'memory'),
-                    new Enemy(600, 150, 'verge')
-                );
-        }
-    }
+const CHARACTERS = {
+    THORNE: "Thorne",
+    AILA: "Aila (Echo)",
+    VOICE_REGRET: "Voice of Regret"
+};
 
-    setupStoryEvents() {
-        // Chapter Intro
-        this.storyEvents[CHAPTERS.INTRO] = () => {
-            this.dialogueSystem.addDialogueSequence([
-                { character: CHARACTERS.VOICE_REGRET, text: "Another day in this shattered realm..." },
-                { character: CHARACTERS.THORNE, text: "The Verge grows stronger. I can feel it feeding on memories, on grief." },
-                { character: CHARACTERS.VOICE_TRUTH, text: "Find her, Thorne. Find what remains." },
-                { character: CHARACTERS.THORNE, text: "Aila... my daughter. What happened to you was unnatural. And I will find answers." }
-            ]);
+// Create dialogue system
+const dialogueSystem = new DialogueSystem();
+
+// ========================================
+// STORY MANAGER
+// ========================================
+
+function triggerStoryEvent(eventType) {
+    switch (eventType) {
+        case 'gameStart':
+            gameState.currentChapter = 1;  // Set to combat chapter 1
+            dialogueSystem.addDialogue(CHARACTERS.VOICE_REGRET, "Another day in this shattered realm...");
+            dialogueSystem.addDialogue(CHARACTERS.THORNE, "The Verge grows stronger. I can feel it feeding on memories, on grief.");
+            dialogueSystem.addDialogue(CHARACTERS.THORNE, "Aila... my daughter. I will find answers in this cursed place.");
+            break;
             
-            // After initial dialogue, progress to first chapter
-            gameState.currentChapter = CHAPTERS.ASH_CHAPEL;
-            gameState.chapterProgress = 0;
-            this.spawnChapterEnemies(); // Spawn enemies for the new chapter
-        };
-
-        // Chapter 1 - Ash Chapel
-        this.storyEvents[CHAPTERS.ASH_CHAPEL] = () => {
-            if (gameState.chapterProgress === 0) {
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.THORNE, text: "The Ash Chapel... where prayers turn to dust. This is where I'll begin my journey." },
-                    { character: CHARACTERS.VOICE_FURY, text: "They all abandoned you. Remember that." }
-                ]);
-                gameState.chapterProgress = 1;
-            } else if (gameState.chapterProgress === 1 && player.x > canvas.width * 0.7) {
-                // Trigger when player reaches a certain point
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.AILA, text: "Father? Is that you?" },
-                    { character: CHARACTERS.THORNE, text: "Aila? No... you can't be here." },
-                    { character: CHARACTERS.AILA, text: "I'm lost in the spaces between memories. Help me." },
-                    { character: CHARACTERS.VOICE_TRUTH, text: "This is merely an echo, Thorne. Don't lose yourself to false hope." },
-                    { character: CHARACTERS.VOICE_REGRET, text: "But what if some part of her remains? You owe her that chance." },
-                    { 
-                        character: CHARACTERS.THORNE, 
-                        text: "How should I respond?", 
-                        choices: [
-                            { 
-                                text: "This isn't real. I must face the truth.", 
-                                effect: () => { 
-                                    gameState.emotionalInventory[EMOTIONS.TRUTH] += 1;
-                                    this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "You're not real. You're a manifestation of the Verge, feeding on my grief.");
-                                }
-                            },
-                            { 
-                                text: "Aila, I'm so sorry I couldn't save you.", 
-                                effect: () => { 
-                                    gameState.emotionalInventory[EMOTIONS.REGRET] += 1;
-                                    this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "I failed you. Every day I live with that regret.");
-                                }
-                            },
-                            { 
-                                text: "I'll find who did this to you.", 
-                                effect: () => { 
-                                    gameState.emotionalInventory[EMOTIONS.FURY] += 1;
-                                    this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "I'll tear this realm apart to find those responsible.");
-                                }
-                            }
-                        ]
-                    }
-                ]);
-                gameState.chapterProgress = 2;
-            } else if (gameState.chapterProgress === 2 && enemies.length === 0) {
-                // When all enemies are defeated
-                this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "The Bridge of Forgotten Names lies ahead. Kas might be there... if he still exists.");
-                
-                // Progress to next chapter after completing this area
-                gameState.currentChapter = CHAPTERS.BRIDGE;
-                gameState.chapterProgress = 0;
-                this.spawnChapterEnemies(); // Spawn enemies for the new chapter
-                player.resetTimeSlowAbility(); // Reset time slow ability
+        case 'firstEnemyDefeated':
+            if (gameState.enemiesDefeated === 1) {
+                dialogueSystem.addDialogue(CHARACTERS.THORNE, "These creatures... they're manifestations of the Verge itself.");
             }
-        };
-
-        // Chapter 2 - Bridge
-        this.storyEvents[CHAPTERS.BRIDGE] = () => {
-            if (gameState.chapterProgress === 0) {
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.THORNE, text: "The Bridge of Forgotten Names... each stone carries a memory of someone lost to the Verge." },
-                    { character: CHARACTERS.KAS, text: "Thorne? Is that really you, old friend?" },
-                    { character: CHARACTERS.THORNE, text: "Kas... You survived." },
-                    { character: CHARACTERS.KAS, text: "Survived? Perhaps. Changed? Definitely. The Verge has ways of altering one's perspective." },
-                    { character: CHARACTERS.KAS, text: "You're still looking for her, aren't you? Your daughter..." },
-                    { 
-                        character: CHARACTERS.THORNE, 
-                        text: "How should I respond to Kas?", 
-                        choices: [
-                            { 
-                                text: "I need to know what happened to her.", 
-                                effect: () => { 
-                                    this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "I need to understand what happened. What the Church did to her.");
-                                    this.dialogueSystem.addDialogue(CHARACTERS.KAS, "Then you'll need to face your own memories first. The Whispering Room holds fragments of your past.");
-                                    gameState.hasEncounteredKas = true;
-                                }
-                            },
-                            { 
-                                text: "Help me navigate the Verge.", 
-                                effect: () => { 
-                                    this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "You've been here longer. Help me understand this place.");
-                                    this.dialogueSystem.addDialogue(CHARACTERS.KAS, "The Verge isn't a place, Thorne. It's what remains when the soul can't forget.");
-                                    this.dialogueSystem.addDialogue(CHARACTERS.KAS, "Seek the Whispering Room. Your past awaits you there.");
-                                    gameState.hasEncounteredKas = true;
-                                }
-                            }
-                        ]
-                    }
-                ]);
-                gameState.chapterProgress = 1;
-            } else if (gameState.chapterProgress === 1 && enemies.length === 0) {
-                this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "The Whispering Room lies ahead. My memories... I'm not sure I'm ready to face them.");
-                gameState.currentChapter = CHAPTERS.WHISPERING_ROOM;
-                gameState.chapterProgress = 0;
-                this.spawnChapterEnemies(); // Spawn enemies for the new chapter
-                player.resetTimeSlowAbility(); // Reset time slow ability
+            break;
+            
+        case 'halfEnemiesDefeated':
+            if (gameState.enemiesDefeated === 1 && enemies.length === 1) {
+                dialogueSystem.addDialogue(CHARACTERS.AILA, "Father? Is that you?");
+                dialogueSystem.addDialogue(CHARACTERS.THORNE, "Aila? No... you can't be here.");
+                dialogueSystem.addDialogue(CHARACTERS.AILA, "I'm lost in the spaces between memories. Help me find peace.");
             }
-        };
-        
-        // Chapter 3 - Whispering Room
-        this.storyEvents[CHAPTERS.WHISPERING_ROOM] = () => {
-            if (gameState.chapterProgress === 0) {
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.THORNE, text: "The Whispering Room... I can hear the echoes of the past." },
-                    { character: CHARACTERS.VOICE_TRUTH, text: "Your memories are fragmented, scattered throughout this place." },
-                    { character: CHARACTERS.VOICE_REGRET, text: "Some memories are better left forgotten, Thorne." }
-                ]);
-                gameState.chapterProgress = 1;
-            } else if (gameState.chapterProgress === 1 && player.x > canvas.width * 0.6) {
-                // Trigger when player reaches a certain point
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.THORNE, text: "I remember this... the day I found out what happened to Aila." },
-                    { character: CHARACTERS.VOICE_REGRET, text: "The day everything changed..." },
-                    { character: CHARACTERS.ASHLAN, text: "Thorne, the Church's experiments... they were trying to reach beyond the Verge." },
-                    { character: CHARACTERS.ASHLAN, text: "Your daughter was one of their subjects. I'm sorry." }
-                ]);
-                gameState.chapterProgress = 2;
-                gameState.hasFoundMemoryPage = true;
-            } else if (gameState.chapterProgress === 2 && enemies.length === 0) {
-                // When all enemies are defeated
-                this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "The Eidolon Tree... that's where I need to go next. The answers are becoming clearer.");
-                
-                // Progress to next chapter
-                gameState.currentChapter = CHAPTERS.EIDOLON_TREE;
-                gameState.chapterProgress = 0;
-                this.spawnChapterEnemies(); // Spawn enemies for the new chapter
-                player.resetTimeSlowAbility(); // Reset time slow ability
-            }
-        };
-        
-        // Chapter 4 - Eidolon Tree
-        this.storyEvents[CHAPTERS.EIDOLON_TREE] = () => {
-            if (gameState.chapterProgress === 0) {
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.THORNE, text: "The Eidolon Tree... they say it connects all memories within the Verge." },
-                    { character: CHARACTERS.VOICE_TRUTH, text: "Its roots run deep, Thorne. Deeper than you can imagine." },
-                    { character: CHARACTERS.VOICE_FURY, text: "The Church used this place for their rituals. They must pay for what they did." }
-                ]);
-                gameState.chapterProgress = 1;
-            } else if (gameState.chapterProgress === 1 && player.x > canvas.width * 0.7) {
-                // Trigger when player reaches a certain point
-                this.dialogueSystem.addDialogueSequence([
-                    { character: CHARACTERS.AILA, text: "Father... the tree speaks to me. It shows me things." },
-                    { character: CHARACTERS.THORNE, text: "Aila? Is it really you this time?" },
-                    { character: CHARACTERS.AILA, text: "I'm scattered, father. Pieces of me exist throughout the Verge." },
-                    { character: CHARACTERS.AILA, text: "Find the Voice Manifestation. That's where they performed the ritual." }
-                ]);
-                gameState.chapterProgress = 2;
-            } else if (gameState.chapterProgress === 2 && enemies.length === 0) {
-                // When all enemies are defeated
-                this.dialogueSystem.addDialogue(CHARACTERS.THORNE, "The Voice Manifestation... I must go there to understand what happened to Aila.");
-                
-                // Progress to next chapter
-                gameState.currentChapter = CHAPTERS.VOICE_MANIFESTATION;
-                gameState.chapterProgress = 0;
-                this.spawnChapterEnemies(); // Spawn enemies for the new chapter
-                player.resetTimeSlowAbility(); // Reset time slow ability
-            }
-        };
-    }
-
-    triggerCurrentChapterEvents() {
-        const currentChapterEvent = this.storyEvents[gameState.currentChapter];
-        if (currentChapterEvent) {
-            currentChapterEvent();
-        }
-    }
-
-    updateChapterBackground() {
-        // Change the visual elements based on current chapter
-        switch (gameState.currentChapter) {
-            case CHAPTERS.INTRO:
-            case CHAPTERS.ASH_CHAPEL:
-                COLORS.BACKGROUND_1 = '#111122';
-                COLORS.BACKGROUND_2 = '#222233';
-                COLORS.PLATFORM = '#555555';
-                break;
-            case CHAPTERS.BRIDGE:
-                COLORS.BACKGROUND_1 = '#1a1a2e';
-                COLORS.BACKGROUND_2 = '#292944';
-                COLORS.PLATFORM = '#444466';
-                break;
-            case CHAPTERS.WHISPERING_ROOM:
-                COLORS.BACKGROUND_1 = '#221122';
-                COLORS.BACKGROUND_2 = '#332233';
-                COLORS.PLATFORM = '#553355';
-                break;
-            case CHAPTERS.EIDOLON_TREE:
-                COLORS.BACKGROUND_1 = '#112211';
-                COLORS.BACKGROUND_2 = '#223322';
-                COLORS.PLATFORM = '#335533';
-                break;
-            // Add more chapters with unique visuals
-        }
+            break;
+            
+        case 'allEnemiesDefeated':
+            gameState.current = 'victory';  // Switch to victory screen instead of setting chapter
+            dialogueSystem.addDialogue(CHARACTERS.THORNE, "The chapel is cleansed... but this is only the beginning.");
+            dialogueSystem.addDialogue(CHARACTERS.AILA, "Thank you, father. I can rest now.");
+            dialogueSystem.addDialogue(CHARACTERS.VOICE_REGRET, "One step closer to the truth, Thorne. But the path ahead grows darker.");
+            break;
     }
 }
+
+function updateChapterDisplay() {
+    let chapterName = "";
+    switch (gameState.currentChapter) {
+        case CHAPTERS.INTRO:
+            chapterName = "Prologue";
+            break;
+        case CHAPTERS.ASH_CHAPEL:
+            chapterName = "Chapter 1: Ash Chapel";
+            break;
+        case CHAPTERS.BRIDGE:
+            chapterName = "Chapter 2: Bridge of Forgotten Names";
+            break;
+        case CHAPTERS.VICTORY:
+            chapterName = "Victory";
+            break;
+        default:
+            chapterName = "Unknown Chapter";
+    }
+    return chapterName;
+}
+
+// ========================================
+// GAME OBJECTS
+// ========================================
 
 // Player Class
 class Player {
@@ -743,494 +645,309 @@ class Player {
         this.height = 50;
         this.velocityX = 0;
         this.velocityY = 0;
-        this.isJumping = false;
+        this.isOnGround = false;
+        this.health = 3;
+        this.maxHealth = 3;
+        this.facingRight = true;
         this.isAttacking = false;
         this.attackTimer = 0;
-        this.facingRight = true;
-        this.health = 5;
-        this.maxHealth = 5;
-        this.soul = 50; // Start with some soul for abilities
-        this.maxSoul = 100;
-        this.isDashing = false;
-        this.dashTimer = 0;
-        this.dashCooldown = 0;
-        this.canDoubleJump = true;
-        this.jumpKeyPressed = false;
-        this.dashKeyPressed = false;
+        this.invincibilityTimer = 0;
         
-        // Time slow ability
-        this.timeSlowActive = false;
-        this.timeSlowDuration = 180; // 3 seconds at 60 FPS
-        this.timeSlowTimer = 0;
-        this.timeSlowCooldown = 600; // 10 seconds at 60 FPS
-        this.timeSlowCooldownTimer = 0;
-        this.timeSlowKeyPressed = false;
+        // Advanced combat properties
+        this.parrySystem = new ParrySystem(this);
+        this.damageBoost = null;
+        this.damageBoostMultiplier = 1.0; // Default damage multiplier
+        this.vulnerabilityTime = 0;
         
-        // Thorne-specific properties
-        this.name = "Thorne";
-        this.emotionalState = null; // Can be truth, regret, or fury
+        // Stamina system
+        this.stamina = 100;
+        this.maxStamina = 100;
+        this.staminaRegenRate = 25; // Stamina per second
+        this.staminaRegenDelay = 1.0; // Delay after stamina use before regen starts
+        this.lastStaminaUse = 0;
+        this.isExhausted = false;
     }
 
-    update(platforms) {
-        // Time slow cooldown
-        if (this.timeSlowCooldownTimer > 0) {
-            this.timeSlowCooldownTimer--;
+    update() {
+        // Update timers
+        if (this.attackTimer > 0) this.attackTimer--;
+        if (this.invincibilityTimer > 0) this.invincibilityTimer--;
+        if (this.vulnerabilityTime > 0) this.vulnerabilityTime -= deltaTime;
+        
+        // Update damage boost
+        if (this.damageBoost && this.damageBoost.duration > 0) {
+            this.damageBoost.duration -= deltaTime;
+            this.damageBoostMultiplier = this.damageBoost.multiplier || 1.0;
+            if (this.damageBoost.duration <= 0) {
+                this.damageBoost = null;
+                this.damageBoostMultiplier = 1.0; // Reset to default
+            }
+        } else {
+            this.damageBoostMultiplier = 1.0; // Ensure default when no boost
         }
         
-        // Time slow active timer
-        if (this.timeSlowActive) {
-            this.timeSlowTimer--;
-            if (this.timeSlowTimer <= 0) {
-                this.timeSlowActive = false;
-                // Reset enemy speeds to normal
-                enemies.forEach(enemy => {
-                    enemy.timeSlowFactor = 1;
-                });
+        // Update parry system
+        this.parrySystem.update(deltaTime);
+        
+        // Update stamina system
+        this.updateStamina(deltaTime);
+        
+        // Attack is active during timer
+        this.isAttacking = this.attackTimer > 0;
+
+        // Handle movement input
+        this.velocityX = 0;
+        if (keys['ArrowLeft'] || keys['KeyA']) {
+            if (this.canUseStamina(5)) { // Running costs stamina
+                this.velocityX = -GAME_CONFIG.PLAYER_SPEED;
+                this.facingRight = false;
+                this.useStamina(5);
+            } else {
+                // Slow walk when exhausted
+                this.velocityX = -GAME_CONFIG.PLAYER_SPEED * 0.5;
+                this.facingRight = false;
+            }
+        }
+        if (keys['ArrowRight'] || keys['KeyD']) {
+            if (this.canUseStamina(5)) { // Running costs stamina
+                this.velocityX = GAME_CONFIG.PLAYER_SPEED;
+                this.facingRight = true;
+                this.useStamina(5);
+            } else {
+                // Slow walk when exhausted
+                this.velocityX = GAME_CONFIG.PLAYER_SPEED * 0.5;
+                this.facingRight = true;
+            }
+        }
+
+        // Handle jump (only when not in dialogue)
+        if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && this.isOnGround && !gameState.inDialogue) {
+            if (this.canUseStamina(20)) { // Jumping costs stamina
+                this.velocityY = GAME_CONFIG.JUMP_FORCE;
+                this.isOnGround = false;
+                this.useStamina(20);
+            }
+        }
+
+        // Handle attack (only when not in dialogue)
+        if ((keys['KeyZ'] || keys['KeyJ']) && (keyPressed['KeyZ'] || keyPressed['KeyJ']) && !gameState.inDialogue) {
+            if (this.canUseStamina(15)) { // Attacking costs stamina
+                this.attack();
+                this.useStamina(15);
             }
         }
         
-        // Dash cooldown
-        if (this.dashCooldown > 0) {
-            this.dashCooldown--;
-        }
-
-        // Dashing logic
-        if (this.isDashing) {
-            this.dashTimer--;
-            if (this.dashTimer <= 0) {
-                this.isDashing = false;
-                this.velocityX = 0;
-            }
-            return; // Skip other physics when dashing
-        }
-
-        // Attack timer
-        if (this.isAttacking) {
-            this.attackTimer--;
-            if (this.attackTimer <= 0) {
-                this.isAttacking = false;
+        // Handle parry (only when not in dialogue)
+        if (keys['KeyQ'] && keyPressed['KeyQ'] && !gameState.inDialogue) {
+            if (this.canUseStamina(10)) { // Parrying costs stamina
+                this.parrySystem.attemptParry();
+                this.useStamina(10);
             }
         }
 
         // Apply gravity
-        this.velocityY += GRAVITY;
+        this.velocityY += GAME_CONFIG.GRAVITY;
 
         // Update position
         this.x += this.velocityX;
         this.y += this.velocityY;
 
-        // Check for platform collisions
-        this.checkPlatformCollisions(platforms);
-
-        // Bound to canvas
+        // Boundary checking
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
-    }
-
-    checkPlatformCollisions(platforms) {
-        let onGround = false;
-
-        for (const platform of platforms) {
-            // Check if player is colliding with platform
-            if (this.x + this.width > platform.x &&
-                this.x < platform.x + platform.width &&
-                this.y + this.height > platform.y &&
-                this.y < platform.y + platform.height) {
-
-                // Collision from top (landing)
-                if (this.velocityY > 0 && this.y + this.height - this.velocityY <= platform.y) {
-                    this.y = platform.y - this.height;
-                    this.velocityY = 0;
-                    onGround = true;
-                    this.canDoubleJump = true;
-                }
-                // Collision from bottom
-                else if (this.velocityY < 0 && this.y - this.velocityY >= platform.y + platform.height) {
-                    this.y = platform.y + platform.height;
-                    this.velocityY = 0;
-                }
-                // Collision from left
-                else if (this.velocityX > 0 && this.x + this.width - this.velocityX <= platform.x) {
-                    this.x = platform.x - this.width - 1; // Add 1 pixel margin
-                    this.velocityX = 0; // Stop horizontal movement
-                }
-                // Collision from right
-                else if (this.velocityX < 0 && this.x - this.velocityX >= platform.x + platform.width) {
-                    this.x = platform.x + platform.width + 1; // Add 1 pixel margin
-                    this.velocityX = 0; // Stop horizontal movement
-                }
-            }
-        }
-
-        this.isJumping = !onGround;
-    }
-
-    jump() {
-        if (!this.isJumping) {
-            this.velocityY = JUMP_FORCE;
-            this.isJumping = true;
-        } else if (this.canDoubleJump) {
-            // Double jump
-            this.velocityY = JUMP_FORCE;
-            this.canDoubleJump = false;
+        if (this.y > canvas.height) {
+            this.takeDamage(1); // Fall damage
+            this.respawn();
         }
     }
 
     attack() {
-        if (!this.isAttacking) {
-            this.isAttacking = true;
-            this.attackTimer = ATTACK_DURATION;
+        if (this.attackTimer > 0 || !this.canUseStamina(15)) return;
+        
+        this.attackTimer = GAME_CONFIG.ATTACK_DURATION;
+        this.useStamina(15);
+        
+        // Check for riposte bonus
+        const isRiposte = this.parrySystem.canRiposte;
+        const riposteMult = isRiposte ? this.parrySystem.riposteDamageMultiplier : 1.0;
+        
+        // Create attack box for collision detection
+        const attackBox = {
+            x: this.facingRight ? this.x + this.width : this.x - GAME_CONFIG.ATTACK_RANGE,
+            y: this.y + 10,
+            width: GAME_CONFIG.ATTACK_RANGE,
+            height: this.height - 20
+        };
+        
+        // Check for enemy hits
+        enemies.forEach(enemy => {
+            if (enemy.checkCollisionWithRect(attackBox)) {
+                const damage = 1 * this.damageBoostMultiplier * riposteMult;
+                enemy.takeDamage(damage);
+                createDamageParticles(enemy.x + enemy.width/2, enemy.y + enemy.height/2);
+                
+                // If this was a riposte, apply stagger
+                if (isRiposte) {
+                    enemy.stagger(1.0); // 1 second stagger
+                    this.parrySystem.canRiposte = false; // Consume riposte
+                    this.parrySystem.riposteWindow = 0;
+                    
+                    // Create special riposte effects
+                    for (let i = 0; i < 15; i++) {
+                        particles.push(new Particle(
+                            enemy.x + enemy.width/2,
+                            enemy.y + enemy.height/2,
+                            (Math.random() - 0.5) * 8,
+                            -Math.random() * 6,
+                            '#FFD700',
+                            40,
+                            3 + Math.random() * 2
+                        ));
+                    }
+                }
+            }
+        });
+        
+        // Create attack particles (enhanced for riposte)
+        const attackX = this.facingRight ? this.x + this.width + 25 : this.x - 25;
+        const attackY = this.y + this.height / 2;
+        const direction = this.facingRight ? 1 : -1;
+        createAttackParticles(attackX, attackY, direction);
+        
+        // Add extra particles for riposte
+        if (isRiposte) {
+            for (let i = 0; i < 8; i++) {
+                particles.push(new Particle(
+                    attackX,
+                    attackY,
+                    (Math.random() - 0.5) * 6 * direction,
+                    -Math.random() * 4,
+                    '#FFD700',
+                    30,
+                    2
+                ));
+            }
+        }
+        
+        // Play attack sound
+        if (audioManager) {
+            audioManager.playAttackSound(isRiposte ? 'riposte' : 'slash');
         }
     }
 
-    dash() {
-        if (!this.isDashing && this.dashCooldown === 0) {
-            this.isDashing = true;
-            this.dashTimer = DASH_DURATION;
-            this.dashCooldown = DASH_COOLDOWN;
-            this.velocityX = this.facingRight ? DASH_SPEED : -DASH_SPEED;
-            this.velocityY = 0; // No gravity during dash
+    takeDamage(damage) {
+        if (this.invincibilityTimer === 0) {
+            this.health -= damage;
+            this.invincibilityTimer = GAME_CONFIG.INVINCIBILITY_TIME;
+            
+            // Create damage particles
+            createDamageParticles(this.x + this.width/2, this.y + this.height/2);
+            
+            if (this.health <= 0) {
+                gameState.current = 'gameOver';
+            }
         }
     }
 
-    takeDamage(amount) {
-        this.health -= amount;
-        if (this.health <= 0) {
-            gameState.gameOver = true;
-        }
-    }
-
-    gainSoul(amount) {
-        this.soul = Math.min(this.soul + amount, this.maxSoul);
+    respawn() {
+        this.x = 100;
+        this.y = 300;
+        this.velocityX = 0;
+        this.velocityY = 0;
     }
 
     draw() {
-        // Optimize drawing by minimizing context state changes
-        
-        // Draw dash effect (afterimages) first if dashing
-        if (this.isDashing) {
-            ctx.fillStyle = COLORS.PLAYER_DASH;
-            for (let i = 1; i <= 3; i++) {
-                const alpha = 0.3 - (i * 0.1);
-                ctx.globalAlpha = alpha;
-                const offset = this.facingRight ? -i * 10 : i * 10;
-                ctx.fillRect(this.x + offset, this.y, this.width, this.height);
-            }
-            ctx.globalAlpha = 1; // Reset alpha once
+        // Choose color based on state
+        let playerColor = COLORS.PLAYER;
+        if (this.invincibilityTimer > 0) {
+            // Flash during invincibility
+            playerColor = (Math.floor(this.invincibilityTimer / 5) % 2) ? COLORS.PLAYER_INVINCIBLE : COLORS.PLAYER;
         }
         
-        // Main player body
-        ctx.fillStyle = COLORS.PLAYER;
+        // Apply damage boost glow
+        if (this.damageBoost) {
+            ctx.save();
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 10;
+        }
+        
+        ctx.fillStyle = playerColor;
         ctx.fillRect(this.x, this.y, this.width, this.height);
         
-        // Draw attack animation
+        if (this.damageBoost) {
+            ctx.restore();
+        }
+        
+        // Draw attack hitbox
         if (this.isAttacking) {
             ctx.fillStyle = COLORS.PLAYER_ATTACK;
-            const attackWidth = 40;
-            const attackX = this.facingRight ? this.x + this.width : this.x - attackWidth;
-            ctx.fillRect(attackX, this.y + 10, attackWidth, this.height - 20);
+            const attackX = this.facingRight ? this.x + this.width : this.x - GAME_CONFIG.ATTACK_RANGE;
+            ctx.fillRect(attackX, this.y + 10, GAME_CONFIG.ATTACK_RANGE, this.height - 20);
         }
+        
+        // Render parry system effects
+        this.parrySystem.render(ctx);
     }
 
-    drawHUD() {
-        // Health
-        ctx.fillStyle = COLORS.HEALTH;
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'left';
-        ctx.fillText('SANITY', 20, 18);
-        for (let i = 0; i < this.maxHealth; i++) {
-            ctx.globalAlpha = i < this.health ? 1 : 0.3;
-            ctx.fillRect(20 + i * 30, 25, 20, 20);
-        }
+    getAttackBox() {
+        if (!this.isAttacking) return null;
         
-        // Soul meter (renamed to "Memory Essence")
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "#AAAAFF";
-        ctx.fillText('MEMORY ESSENCE', 20, 65);
-        ctx.fillStyle = "#333333";
-        ctx.fillRect(20, 70, 100, 10);
-        ctx.fillStyle = COLORS.SOUL;
-        ctx.fillRect(20, 70, this.soul, 10);
-        
-        // Ability indicators
-        ctx.fillStyle = "#AAAAFF";
-        ctx.fillText('ABILITIES', 20, 105);
-        
-        // Time slow ability icon
-        ctx.beginPath();
-        ctx.arc(30, 125, 15, 0, Math.PI * 2);
-        
-        // Change color based on cooldown
-        if (this.timeSlowCooldownTimer > 0) {
-            // Show cooldown progress
-            ctx.fillStyle = "#555555";
-            ctx.fill();
-            
-            // Draw cooldown overlay
-            const cooldownProgress = this.timeSlowCooldownTimer / this.timeSlowCooldown;
-            ctx.beginPath();
-            ctx.moveTo(30, 125);
-            ctx.arc(30, 125, 15, -Math.PI/2, -Math.PI/2 + (1 - cooldownProgress) * Math.PI * 2);
-            ctx.lineTo(30, 125);
-            ctx.fillStyle = "#88CCFF";
-            ctx.fill();
-            
-            // Show cooldown text
-            ctx.fillStyle = "#FFFFFF";
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            const cooldownSeconds = Math.ceil(this.timeSlowCooldownTimer / 60);
-            ctx.fillText(cooldownSeconds, 30, 128);
-        } else {
-            // Ready to use
-            ctx.fillStyle = this.timeSlowActive ? "#FFCC00" : "#88CCFF";
-            ctx.fill();
-            
-            // Draw clock icon
-            ctx.strokeStyle = "#FFFFFF";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(30, 125);
-            ctx.lineTo(30, 118);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(30, 125);
-            ctx.lineTo(35, 125);
-            ctx.stroke();
-        }
-        
-        // Key binding text
-        ctx.fillStyle = "#FFFFFF";
-        ctx.font = '10px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('C', 30, 145);
-        
-        // Chapter display
-        ctx.fillStyle = '#FFFFFF';
-        ctx.textAlign = 'center';
-        let chapterName = "";
-        switch(gameState.currentChapter) {
-            case CHAPTERS.INTRO: chapterName = "Prologue"; break;
-            case CHAPTERS.ASH_CHAPEL: chapterName = "Chapter 1: Ash Chapel"; break;
-            case CHAPTERS.BRIDGE: chapterName = "Chapter 2: Bridge of Forgotten Names"; break;
-            case CHAPTERS.WHISPERING_ROOM: chapterName = "Chapter 3: The Whispering Room"; break;
-            case CHAPTERS.EIDOLON_TREE: chapterName = "Chapter 4: Eidolon Tree"; break;
-            case CHAPTERS.VOICE_MANIFESTATION: chapterName = "Chapter 5: Voice Manifestation"; break;
-            case CHAPTERS.LAMENT_GATE: chapterName = "Chapter 6: The Lament Gate"; break;
-            case CHAPTERS.FOLDED_THRONE: chapterName = "Final Chapter: The Folded Throne"; break;
-        }
-        ctx.fillText(chapterName, canvas.width / 2, 30);
+        return {
+            x: this.facingRight ? this.x + this.width : this.x - GAME_CONFIG.ATTACK_RANGE,
+            y: this.y + 10,
+            width: GAME_CONFIG.ATTACK_RANGE,
+            height: this.height - 20
+        };
     }
     
-    // Time slow ability
-    activateTimeSlow() {
-        if (!this.timeSlowActive && this.timeSlowCooldownTimer === 0 && this.soul >= 20) {
-            this.timeSlowActive = true;
-            this.timeSlowTimer = this.timeSlowDuration;
-            this.timeSlowCooldownTimer = this.timeSlowCooldown;
-            this.soul -= 20; // Cost soul to use ability
+    // Stamina Management Methods
+    updateStamina(deltaTime) {
+        const currentTime = Date.now() / 1000;
+        
+        // Check if we should start regenerating stamina
+        if (currentTime - this.lastStaminaUse >= this.staminaRegenDelay) {
+            // Regenerate stamina
+            if (this.stamina < this.maxStamina) {
+                this.stamina += this.staminaRegenRate * deltaTime;
+                this.stamina = Math.min(this.stamina, this.maxStamina);
+                
+                // No longer exhausted if we have some stamina
+                if (this.stamina > 10) {
+                    this.isExhausted = false;
+                }
+            }
+        }
+        
+        // Check for exhaustion
+        if (this.stamina <= 0) {
+            this.isExhausted = true;
+            this.stamina = 0;
             
-            // Slow down all enemies
-            enemies.forEach(enemy => {
-                enemy.timeSlowFactor = 0.3; // Enemies move at 30% speed
-            });
-            
-            // Visual effect for time slow
-            createTimeSlowEffect();
+            // Trigger stamina tutorial on first exhaustion
+            tutorialSystem.triggerStaminaTutorial();
         }
     }
     
-    // Reset time slow ability (called on chapter clear or death)
-    resetTimeSlowAbility() {
-        this.timeSlowActive = false;
-        this.timeSlowTimer = 0;
-        this.timeSlowCooldownTimer = 0;
-        
-        // Reset enemy speeds to normal
-        enemies.forEach(enemy => {
-            enemy.timeSlowFactor = 1;
-        });
+    canUseStamina(amount) {
+        return this.stamina >= amount && !this.isExhausted;
     }
-}
-
-// Enemy Class
-class Enemy {
-    constructor(x, y, type = 'basic') {
-        this.x = x;
-        this.y = y;
-        this.width = 40;
-        this.height = 40;
-        this.velocityX = 1; // Move back and forth
-        this.velocityY = 0;
-        this.type = type;
-        this.health = 2;
-        this.damage = 1;
-        this.soulValue = 10;
-        this.attackCooldown = 0;
-        this.timeSlowFactor = 1; // Default normal speed (1 = 100%)
-        
-        // Story-specific enemy types
-        switch(type) {
-            case 'verge':
-                this.color = COLORS.VERGE_CORRUPTION;
-                this.health = 3;
-                this.damage = 2;
-                this.soulValue = 15;
-                break;
-            case 'memory':
-                this.color = '#7788FF';
-                this.health = 1;
-                this.damage = 1;
-                this.soulValue = 20;
-                break;
-            case 'voice':
-                this.color = '#FF7788';
-                this.health = 4;
-                this.damage = 2;
-                this.soulValue = 25;
-                break;
-            default:
-                this.color = COLORS.ENEMY;
-        }
-    }
-
-    update(platforms, player) {
-        // Apply gravity (affected by time slow)
-        this.velocityY += GRAVITY * this.timeSlowFactor;
-
-        // Basic movement - patrol back and forth (affected by time slow)
-        this.x += this.velocityX * this.timeSlowFactor;
-        this.y += this.velocityY * this.timeSlowFactor;
-
-        // Simple AI (affected by time slow)
-        if (Math.random() < 0.01 * this.timeSlowFactor) {
-            this.velocityX *= -1; // Randomly change direction
-        }
-
-        // Check for platform collisions
-        for (const platform of platforms) {
-            if (this.x + this.width > platform.x &&
-                this.x < platform.x + platform.width &&
-                this.y + this.height > platform.y &&
-                this.y < platform.y + platform.height) {
-                
-                // Landing on platform
-                if (this.velocityY > 0 && this.y + this.height - this.velocityY <= platform.y) {
-                    this.y = platform.y - this.height;
-                    this.velocityY = 0;
-                }
-                // Hit ceiling
-                else if (this.velocityY < 0 && this.y - this.velocityY >= platform.y + platform.height) {
-                    this.y = platform.y + platform.height;
-                    this.velocityY = 0;
-                }
-                // Hit wall - change direction
-                else if (this.velocityX > 0 && this.x + this.width - this.velocityX <= platform.x) {
-                    this.x = platform.x - this.width;
-                    this.velocityX *= -1;
-                }
-                else if (this.velocityX < 0 && this.x - this.velocityX >= platform.x + platform.width) {
-                    this.x = platform.x + platform.width;
-                    this.velocityX *= -1;
-                }
-            }
-        }
-
-        // Check for edge of platforms and reverse direction
-        let onPlatform = false;
-        for (const platform of platforms) {
-            if (this.x + this.width > platform.x &&
-                this.x < platform.x + platform.width &&
-                this.y + this.height === platform.y) {
-                onPlatform = true;
-                
-                // Check if about to walk off edge
-                if ((this.velocityX > 0 && this.x + this.width + 5 > platform.x + platform.width) ||
-                    (this.velocityX < 0 && this.x - 5 < platform.x)) {
-                    this.velocityX *= -1;
-                }
-                break;
-            }
-        }
-
-        // Check for collision with player
-        if (this.attackCooldown > 0) {
-            // Attack cooldown affected by time slow
-            this.attackCooldown -= this.timeSlowFactor;
-        }
-
-        if (this.checkCollision(player) && this.attackCooldown === 0) {
-            player.takeDamage(this.damage);
-            this.attackCooldown = 30; // Prevent constant damage
-        }
-
-        // Check if enemy is hit by player attack
-        if (player.isAttacking) {
-            const attackBox = {
-                x: player.facingRight ? player.x + player.width : player.x - 40,
-                y: player.y + 10,
-                width: 40,
-                height: player.height - 20
-            };
+    
+    useStamina(amount) {
+        if (this.stamina >= amount) {
+            this.stamina -= amount;
+            this.lastStaminaUse = Date.now() / 1000;
             
-            if (this.checkCollisionWithRect(attackBox)) {
-                this.health--;
-                if (this.health <= 0) {
-                    player.gainSoul(this.soulValue);
-                    return false; // Enemy is defeated
-                }
-                
-                // Knockback
-                this.velocityX = player.facingRight ? 5 : -5;
-                this.velocityY = -3;
+            if (this.stamina <= 0) {
+                this.isExhausted = true;
+                this.stamina = 0;
             }
+            return true;
         }
-
-        return true; // Enemy is still alive
+        return false;
     }
-
-    checkCollision(player) {
-        return this.x < player.x + player.width &&
-               this.x + this.width > player.x &&
-               this.y < player.y + player.height &&
-               this.y + this.height > player.y;
-    }
-
-    checkCollisionWithRect(rect) {
-        return this.x < rect.x + rect.width &&
-               this.x + this.width > rect.x &&
-               this.y < rect.y + rect.height &&
-               this.y + this.height > rect.y;
-    }
-
-    draw() {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-        
-        // Draw time slow effect if active
-        if (this.timeSlowFactor < 1) {
-            ctx.strokeStyle = '#88CCFF';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.rect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
-            ctx.stroke();
-            
-            // Draw clock icon above enemy
-            ctx.fillStyle = '#88CCFF';
-            ctx.beginPath();
-            ctx.arc(this.x + this.width / 2, this.y - 10, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = '#FFFFFF';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(this.x + this.width / 2, this.y - 10);
-            ctx.lineTo(this.x + this.width / 2, this.y - 14);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(this.x + this.width / 2, this.y - 10);
-            ctx.lineTo(this.x + this.width / 2 + 3, this.y - 8);
-            ctx.stroke();
-        }
+    
+    getStaminaPercentage() {
+        return this.stamina / this.maxStamina;
     }
 }
 
@@ -1244,503 +961,2655 @@ class Platform {
     }
 
     draw() {
+        // Main platform body
         ctx.fillStyle = COLORS.PLATFORM;
         ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+        // Top edge highlight
+        ctx.fillStyle = COLORS.PLATFORM_EDGE;
+        ctx.fillRect(this.x, this.y, this.width, 2);
+        
+        // Side edges for depth
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(this.x + this.width - 1, this.y, 1, this.height);
+        ctx.fillRect(this.x, this.y + this.height - 1, this.width, 1);
     }
 }
 
-// Game initialization
-let player = new Player(canvas.width / 2, canvas.height / 2);
-let enemies = [
-    new Enemy(100, 100, 'verge'),
-    new Enemy(400, 200, 'memory'),
-    new Enemy(600, 150, 'verge')
-];
-let platforms = [
-    // Ground
-    new Platform(0, canvas.height - 30, canvas.width, 30),
-    // Platforms
-    new Platform(100, 350, 200, 20),
-    new Platform(400, 300, 200, 20),
-    new Platform(200, 200, 150, 20),
-    new Platform(500, 150, 100, 20),
-    new Platform(50, 150, 100, 20)
-];
+// Enemy Class (Basic)
+class Enemy {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 40;
+        this.height = 40;
+        this.velocityX = 1;
+        this.velocityY = 0;
+        this.health = 2;
+        this.maxHealth = 2;
+        this.damageFlashTimer = 0;
+        this.attackTelegraph = 0;
+        this.attackCooldown = 0;
+        
+        // Advanced combat properties
+        this.currentAttack = null;
+        this.attackTypes = this.getChapterAttackTypes();
+        this.facingLeft = false;
+        this.staggerTime = 0;
+        this.lastAttackTime = 0;
+        
+        // Combo system properties
+        this.inCombo = false;
+        this.comboSequence = [];
+        this.comboIndex = 0;
+        this.comboTimer = 0;
+    }
+    
+    getChapterAttackTypes() {
+        const chapter = gameState.currentChapter || 1;
+        switch (chapter) {
+            case 1: return [ATTACK_TYPES.SLASH];
+            case 2: return [ATTACK_TYPES.SLASH, ATTACK_TYPES.THRUST];
+            case 3: return [ATTACK_TYPES.SLASH, ATTACK_TYPES.THRUST, ATTACK_TYPES.AOE_CIRCLE];
+            case 4: return [ATTACK_TYPES.SLASH, ATTACK_TYPES.THRUST, ATTACK_TYPES.AOE_CIRCLE, ATTACK_TYPES.AOE_CONE, ATTACK_TYPES.CHARGE];
+            case 5: return [ATTACK_TYPES.SLASH, ATTACK_TYPES.THRUST, ATTACK_TYPES.AOE_CIRCLE, ATTACK_TYPES.AOE_CONE, ATTACK_TYPES.CHARGE, ATTACK_TYPES.GROUND_SLAM];
+            default: return [ATTACK_TYPES.SLASH];
+        }
+    }
 
-// Memory fragments (collectibles that provide story exposition)
-let memoryFragments = [];
+    update() {
+        // Update timers
+        if (this.damageFlashTimer > 0) this.damageFlashTimer--;
+        if (this.attackTelegraph > 0) this.attackTelegraph--;
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (this.staggerTime > 0) this.staggerTime -= deltaTime;
 
-// Dialogue and Story Initialization
-const dialogueSystem = new DialogueSystem();
-const storyManager = new StoryManager(dialogueSystem);
+        // Update current attack
+        if (this.currentAttack) {
+            this.currentAttack.update(deltaTime);
+            
+            // Check if attack hits player and handle parrying
+            if (this.currentAttack.state === ATTACK_STATES.EXECUTE) {
+                const parryResult = player.parrySystem.checkParryAgainstAttack(this.currentAttack);
+                if (!parryResult && this.currentAttack.checkPlayerHit()) {
+                    // Player hit by attack
+                    const damage = this.currentAttack.getScaledDamage();
+                    player.takeDamage(damage);
+                }
+            }
+            
+            // Clean up finished attacks
+            if (this.currentAttack.state === ATTACK_STATES.IDLE) {
+                this.currentAttack = null;
+            }
+        }
+        
+        // Update combo sequence
+        this.updateComboSequence(deltaTime);
 
-// Input handling
-const keys = {
-    arrowUpPressed: false,
-    arrowDownPressed: false,
-    spacePressed: false
+        // Don't move while staggered
+        if (this.staggerTime <= 0) {
+            // Simple AI - move back and forth
+            this.x += this.velocityX;
+            
+            // Update facing direction
+            this.facingLeft = this.velocityX < 0;
+            
+            // Reverse direction at boundaries
+            if (this.x <= 0 || this.x + this.width >= canvas.width) {
+                this.velocityX *= -1;
+            }
+
+            // Attack logic when player is nearby
+            const playerDistance = Math.abs(this.x - player.x);
+            const currentTime = Date.now();
+            if (playerDistance < 120 && !this.currentAttack && !this.inCombo && currentTime - this.lastAttackTime > 2000) {
+                // Trigger parry tutorial on first enemy encounter
+                if (this.lastAttackTime === 0) {
+                    tutorialSystem.triggerParryTutorial();
+                }
+                
+                this.initiateComboAttack();
+                this.lastAttackTime = currentTime;
+            }
+        }
+
+        // Apply gravity
+        this.velocityY += GAME_CONFIG.GRAVITY;
+        this.y += this.velocityY;
+    }
+    
+    initiateAttack() {
+        // Choose random attack type based on chapter
+        const attackType = this.attackTypes[Math.floor(Math.random() * this.attackTypes.length)];
+        
+        switch (attackType) {
+            case ATTACK_TYPES.SLASH:
+                this.currentAttack = new SlashAttack(this);
+                break;
+            case ATTACK_TYPES.THRUST:
+                this.currentAttack = new ThrustAttack(this);
+                break;
+            case ATTACK_TYPES.AOE_CIRCLE:
+                this.currentAttack = new AOECircleAttack(this, 80);
+                break;
+            case ATTACK_TYPES.AOE_CONE:
+                this.currentAttack = new AOEConeAttack(this);
+                break;
+            case ATTACK_TYPES.CHARGE:
+                this.currentAttack = new ChargeAttack(this);
+                tutorialSystem.triggerChargeTutorial();
+                break;
+            case ATTACK_TYPES.GROUND_SLAM:
+                this.currentAttack = new GroundSlamAttack(this);
+                tutorialSystem.triggerGroundSlamTutorial();
+                break;
+        }
+        
+        if (this.currentAttack) {
+            this.currentAttack.startAttack();
+        }
+    }
+    
+    // Combo Attack System
+    initiateComboAttack() {
+        const chapter = gameState.currentChapter || 1;
+        
+        // Only chapters 4+ have combo attacks
+        if (chapter < 4) {
+            this.initiateAttack();
+            return;
+        }
+        
+        // 30% chance for combo attack in chapter 4+
+        if (Math.random() < 0.3) {
+            this.startComboSequence();
+        } else {
+            this.initiateAttack();
+        }
+    }
+    
+    startComboSequence() {
+        this.comboSequence = [];
+        this.comboIndex = 0;
+        this.comboTimer = 0;
+        this.inCombo = true;
+        
+        // Trigger combo tutorial
+        tutorialSystem.triggerComboTutorial();
+        
+        // Create combo sequence based on chapter
+        const chapter = gameState.currentChapter || 1;
+        if (chapter >= 4) {
+            // 2-3 attack combo
+            const comboLength = 2 + Math.floor(Math.random() * 2);
+            for (let i = 0; i < comboLength; i++) {
+                const attackType = this.attackTypes[Math.floor(Math.random() * this.attackTypes.length)];
+                this.comboSequence.push(attackType);
+            }
+        }
+        
+        // Start first attack in combo
+        this.executeNextComboAttack();
+    }
+    
+    executeNextComboAttack() {
+        if (this.comboIndex >= this.comboSequence.length) {
+            this.endComboSequence();
+            return;
+        }
+        
+        const attackType = this.comboSequence[this.comboIndex];
+        
+        switch (attackType) {
+            case ATTACK_TYPES.SLASH:
+                this.currentAttack = new SlashAttack(this);
+                break;
+            case ATTACK_TYPES.THRUST:
+                this.currentAttack = new ThrustAttack(this);
+                break;
+            case ATTACK_TYPES.AOE_CIRCLE:
+                this.currentAttack = new AOECircleAttack(this, 60); // Smaller AOE in combos
+                break;
+            case ATTACK_TYPES.AOE_CONE:
+                this.currentAttack = new AOEConeAttack(this, Math.PI / 4, 100); // Smaller cone in combos
+                break;
+            case ATTACK_TYPES.CHARGE:
+                this.currentAttack = new ChargeAttack(this);
+                break;
+            case ATTACK_TYPES.GROUND_SLAM:
+                this.currentAttack = new GroundSlamAttack(this);
+                break;
+        }
+        
+        if (this.currentAttack) {
+            this.currentAttack.startAttack();
+            this.comboIndex++;
+        }
+    }
+    
+    updateComboSequence(deltaTime) {
+        if (!this.inCombo) return;
+        
+        // Check if current attack is finished
+        if (!this.currentAttack || this.currentAttack.state === ATTACK_STATES.IDLE) {
+            this.comboTimer += deltaTime;
+            
+            // Wait 0.3 seconds between combo attacks
+            if (this.comboTimer >= 0.3) {
+                this.comboTimer = 0;
+                this.executeNextComboAttack();
+            }
+        }
+    }
+    
+    endComboSequence() {
+        this.inCombo = false;
+        this.comboSequence = [];
+        this.comboIndex = 0;
+        this.comboTimer = 0;
+    }
+    
+    stagger(duration) {
+        this.staggerTime = duration;
+        this.velocityX = 0;
+        
+        // Create stagger effect
+        createDamageParticles(this.x + this.width/2, this.y + this.height/2);
+    }
+
+    takeDamage(damage) {
+        this.health -= damage;
+        this.damageFlashTimer = 10;
+        
+        // Create damage particles
+        createDamageParticles(this.x + this.width/2, this.y + this.height/2);
+        
+        return this.health <= 0;
+    }
+
+    checkCollisionWithRect(rect) {
+        if (!rect || typeof rect.x !== 'number') return false;
+        
+        return this.x < rect.x + rect.width &&
+               this.x + this.width > rect.x &&
+               this.y < rect.y + rect.height &&
+               this.y + this.height > rect.y;
+    }
+
+    draw() {
+        // Choose color based on state
+        let enemyColor = COLORS.ENEMY;
+        if (this.damageFlashTimer > 0) {
+            enemyColor = COLORS.ENEMY_DAMAGED;
+        } else if (this.staggerTime > 0) {
+            enemyColor = '#FFAA00'; // Orange when staggered
+        }
+        
+        ctx.fillStyle = enemyColor;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        
+        // Draw current attack
+        if (this.currentAttack) {
+            this.currentAttack.render(ctx);
+        }
+        
+        // Draw attack telegraph (legacy support)
+        if (this.attackTelegraph > 0) {
+            const intensity = this.attackTelegraph / 30;
+            ctx.save();
+            ctx.globalAlpha = intensity * 0.7;
+            ctx.fillStyle = COLORS.ENEMY_ATTACK;
+            
+            // Draw attack range indicator
+            const attackRange = 60;
+            const attackX = this.x - (attackRange - this.width) / 2;
+            ctx.fillRect(attackX, this.y + this.height - 5, attackRange, 5);
+            
+            // Draw warning glow around enemy
+            ctx.strokeStyle = COLORS.ENEMY_ATTACK;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
+            ctx.restore();
+        }
+        
+        // Draw simple health bar
+        if (this.health < this.maxHealth) {
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(this.x, this.y - 10, this.width, 4);
+            ctx.fillStyle = COLORS.HEALTH;
+            ctx.fillRect(this.x, this.y - 10, (this.health / this.maxHealth) * this.width, 4);
+        }
+    }
+}
+
+// ===== ADVANCED COMBAT SYSTEM =====
+
+// Attack Types Enum
+const ATTACK_TYPES = {
+    SLASH: 'slash',
+    THRUST: 'thrust',
+    AOE_CIRCLE: 'aoe_circle',
+    AOE_CONE: 'aoe_cone',
+    CHARGE: 'charge',
+    GROUND_SLAM: 'ground_slam',
+    PROJECTILE: 'projectile'
 };
 
-window.addEventListener('keydown', e => {
-    keys[e.code] = true;
-    
-    // Prevent scrolling with space/arrow keys
-    if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-    }
-});
+// Attack States
+const ATTACK_STATES = {
+    IDLE: 'idle',
+    TELEGRAPH: 'telegraph',
+    WINDUP: 'windup',
+    EXECUTE: 'execute',
+    RECOVERY: 'recovery'
+};
 
-window.addEventListener('keyup', e => {
-    keys[e.code] = false;
-    
-    // Reset key pressed flags
-    if (e.code === 'ArrowUp') keys.arrowUpPressed = false;
-    if (e.code === 'ArrowDown') keys.arrowDownPressed = false;
-    if (e.code === 'Space') keys.spacePressed = false;
-});
-
-// Mouse click event for sound button and dialogue choices
-canvas.addEventListener('click', e => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Input validation - ensure coordinates are within canvas bounds
-    if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) {
-        return; // Ignore clicks outside canvas
+// Base Attack Class
+class AttackBase {
+    constructor(enemy, type, damage, range, telegraphTime, windupTime, executeTime, recoveryTime) {
+        this.enemy = enemy;
+        this.type = type;
+        this.damage = damage;
+        this.range = range;
+        this.telegraphTime = telegraphTime;
+        this.windupTime = windupTime;
+        this.executeTime = executeTime;
+        this.recoveryTime = recoveryTime;
+        
+        this.state = ATTACK_STATES.IDLE;
+        this.stateTimer = 0;
+        this.isParryable = true;
+        this.hitboxes = [];
+        this.particles = [];
+        
+        // Chapter-based scaling
+        this.chapterScaling = this.getChapterScaling();
     }
     
-    // Check if sound button was clicked
-    if (audioManager.isSoundButtonClicked(x, y)) {
-        audioManager.toggleSound();
-        return;
+    getChapterScaling() {
+        const chapter = gameState.currentChapter || 1;
+        const scalingTable = {
+            1: { telegraphTime: 1.5, damage: 1.0, speed: 1.0 },
+            2: { telegraphTime: 1.25, damage: 1.1, speed: 1.1 },
+            3: { telegraphTime: 1.0, damage: 1.25, speed: 1.2 },
+            4: { telegraphTime: 0.8, damage: 1.4, speed: 1.3 },
+            5: { telegraphTime: 0.6, damage: 1.75, speed: 1.5 }
+        };
+        return scalingTable[chapter] || scalingTable[1];
     }
     
-    // Check if dialogue choice was clicked
-    if (gameState.inDialogue) {
-        dialogueSystem.handleMouseClick(x, y);
-    }
-});
-
-// Mouse move event for dialogue choice hover
-canvas.addEventListener('mousemove', e => {
-    if (!gameState.inDialogue || !dialogueSystem.currentDialogue || 
-        !dialogueSystem.dialogueComplete || !dialogueSystem.choiceAreas.length) {
-        canvas.style.cursor = 'default';
-        return;
+    startAttack() {
+        if (this.state !== ATTACK_STATES.IDLE) return false;
+        
+        this.state = ATTACK_STATES.TELEGRAPH;
+        this.stateTimer = 0;
+        this.createTelegraphEffects();
+        return true;
     }
     
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    // Input validation - ensure coordinates are valid
-    if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) {
-        canvas.style.cursor = 'default';
-        return;
-    }
-    
-    // Check if mouse is over a choice
-    const choiceIndex = dialogueSystem.isPointInChoice(x, y);
-    if (choiceIndex !== null) {
-        canvas.style.cursor = 'pointer'; // Change cursor to pointer
-        if (choiceIndex !== -1) {
-            dialogueSystem.selectedChoice = choiceIndex;
+    update(deltaTime) {
+        this.stateTimer += deltaTime;
+        
+        switch (this.state) {
+            case ATTACK_STATES.TELEGRAPH:
+                this.updateTelegraph(deltaTime);
+                if (this.stateTimer >= this.telegraphTime * this.chapterScaling.telegraphTime) {
+                    this.state = ATTACK_STATES.WINDUP;
+                    this.stateTimer = 0;
+                }
+                break;
+                
+            case ATTACK_STATES.WINDUP:
+                this.updateWindup(deltaTime);
+                if (this.stateTimer >= this.windupTime) {
+                    this.state = ATTACK_STATES.EXECUTE;
+                    this.stateTimer = 0;
+                    this.executeAttack();
+                }
+                break;
+                
+            case ATTACK_STATES.EXECUTE:
+                this.updateExecute(deltaTime);
+                if (this.stateTimer >= this.executeTime) {
+                    this.state = ATTACK_STATES.RECOVERY;
+                    this.stateTimer = 0;
+                }
+                break;
+                
+            case ATTACK_STATES.RECOVERY:
+                this.updateRecovery(deltaTime);
+                if (this.stateTimer >= this.recoveryTime) {
+                    this.state = ATTACK_STATES.IDLE;
+                    this.stateTimer = 0;
+                    this.cleanup();
+                }
+                break;
         }
-    } else {
-        canvas.style.cursor = 'default'; // Reset cursor
+        
+        this.updateParticles(deltaTime);
     }
-});
+    
+    createTelegraphEffects() {
+        // Override in subclasses
+    }
+    
+    updateTelegraph(deltaTime) {
+        // Override in subclasses
+    }
+    
+    updateWindup(deltaTime) {
+        // Override in subclasses
+    }
+    
+    executeAttack() {
+        // Override in subclasses
+    }
+    
+    updateExecute(deltaTime) {
+        // Override in subclasses
+    }
+    
+    updateRecovery(deltaTime) {
+        // Override in subclasses
+    }
+    
+    cleanup() {
+        this.hitboxes = [];
+        this.particles = [];
+    }
+    
+    updateParticles(deltaTime) {
+        this.particles = this.particles.filter(particle => {
+            particle.update(deltaTime);
+            return particle.life > 0;
+        });
+    }
+    
+    render(ctx) {
+        this.renderTelegraph(ctx);
+        this.renderHitboxes(ctx);
+        this.renderParticles(ctx);
+    }
+    
+    renderTelegraph(ctx) {
+        // Override in subclasses
+    }
+    
+    renderHitboxes(ctx) {
+        if (gameState.debugMode) {
+            ctx.strokeStyle = this.isParryable ? 'yellow' : 'red';
+            ctx.lineWidth = 2;
+            this.hitboxes.forEach(hitbox => {
+                ctx.strokeRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
+            });
+        }
+    }
+    
+    renderParticles(ctx) {
+        this.particles.forEach(particle => particle.render(ctx));
+    }
+    
+    checkPlayerHit() {
+        if (this.state !== ATTACK_STATES.EXECUTE) return false;
+        
+        return this.hitboxes.some(hitbox => 
+            player.x < hitbox.x + hitbox.width &&
+            player.x + player.width > hitbox.x &&
+            player.y < hitbox.y + hitbox.height &&
+            player.y + player.height > hitbox.y
+        );
+    }
+    
+    getScaledDamage() {
+        return Math.floor(this.damage * this.chapterScaling.damage);
+    }
+}
 
-// Frame rate control
+// Slash Attack Class
+class SlashAttack extends AttackBase {
+    constructor(enemy, direction = 'horizontal') {
+        super(enemy, ATTACK_TYPES.SLASH, 20, 80, 1.0, 0.3, 0.2, 0.5);
+        this.direction = direction; // 'horizontal', 'vertical', 'diagonal'
+        this.slashAngle = this.getSlashAngle();
+    }
+    
+    getSlashAngle() {
+        switch (this.direction) {
+            case 'horizontal': return 0;
+            case 'vertical': return Math.PI / 2;
+            case 'diagonal': return Math.PI / 4;
+            default: return 0;
+        }
+    }
+    
+    createTelegraphEffects() {
+        // Create telegraph glow
+        const glowIntensity = Math.sin(this.stateTimer * 8) * 0.5 + 0.5;
+        this.telegraphGlow = {
+            intensity: glowIntensity,
+            color: this.isParryable ? 'rgba(255, 255, 0, ' : 'rgba(255, 0, 0, '
+        };
+    }
+    
+    updateTelegraph(deltaTime) {
+        const progress = this.stateTimer / (this.telegraphTime * this.chapterScaling.telegraphTime);
+        this.telegraphGlow.intensity = Math.sin(progress * Math.PI * 6) * 0.5 + 0.5;
+    }
+    
+    executeAttack() {
+        // Create hitbox based on direction
+        const hitboxWidth = this.direction === 'vertical' ? 40 : this.range;
+        const hitboxHeight = this.direction === 'horizontal' ? 40 : this.range;
+        
+        this.hitboxes = [{
+            x: this.enemy.x + (this.enemy.facingLeft ? -this.range : this.enemy.width),
+            y: this.enemy.y + this.enemy.height / 2 - hitboxHeight / 2,
+            width: hitboxWidth,
+            height: hitboxHeight
+        }];
+        
+        // Create slash particles
+        this.createSlashParticles();
+        
+        // Play attack sound
+        if (audioManager) {
+            audioManager.playAttackSound('slash');
+        }
+    }
+    
+    createSlashParticles() {
+        const particleCount = 8;
+        const startX = this.enemy.x + this.enemy.width / 2;
+        const startY = this.enemy.y + this.enemy.height / 2;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = this.slashAngle + (Math.random() - 0.5) * 0.5;
+            const speed = 150 + Math.random() * 100;
+            
+            this.particles.push(new Particle(
+                startX + Math.cos(angle) * 20,
+                startY + Math.sin(angle) * 20,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed,
+                0.3,
+                '#FFD700',
+                3
+            ));
+        }
+    }
+    
+    renderTelegraph(ctx) {
+        if (this.state === ATTACK_STATES.TELEGRAPH && this.telegraphGlow) {
+            ctx.save();
+            ctx.globalAlpha = this.telegraphGlow.intensity;
+            ctx.strokeStyle = this.telegraphGlow.color + this.telegraphGlow.intensity + ')';
+            ctx.lineWidth = 4;
+            
+            const centerX = this.enemy.x + this.enemy.width / 2;
+            const centerY = this.enemy.y + this.enemy.height / 2;
+            const length = this.range;
+            
+            ctx.beginPath();
+            if (this.direction === 'horizontal') {
+                const startX = this.enemy.facingLeft ? centerX - length : centerX;
+                const endX = this.enemy.facingLeft ? centerX : centerX + length;
+                ctx.moveTo(startX, centerY);
+                ctx.lineTo(endX, centerY);
+            } else if (this.direction === 'vertical') {
+                ctx.moveTo(centerX, centerY - length / 2);
+                ctx.lineTo(centerX, centerY + length / 2);
+            } else if (this.direction === 'diagonal') {
+                const offset = length / 2;
+                ctx.moveTo(centerX - offset, centerY - offset);
+                ctx.lineTo(centerX + offset, centerY + offset);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+// Thrust Attack Class
+class ThrustAttack extends AttackBase {
+    constructor(enemy) {
+        super(enemy, ATTACK_TYPES.THRUST, 25, 120, 0.8, 0.2, 0.15, 0.4);
+        this.thrustDistance = 0;
+        this.maxThrustDistance = 60;
+    }
+    
+    createTelegraphEffects() {
+        this.telegraphGlow = {
+            intensity: 0,
+            color: 'rgba(255, 165, 0, '
+        };
+    }
+    
+    updateTelegraph(deltaTime) {
+        const progress = this.stateTimer / (this.telegraphTime * this.chapterScaling.telegraphTime);
+        this.telegraphGlow.intensity = Math.sin(progress * Math.PI * 8) * 0.7 + 0.3;
+    }
+    
+    executeAttack() {
+        // Create narrow, long hitbox for thrust
+        this.hitboxes = [{
+            x: this.enemy.x + (this.enemy.facingLeft ? -this.range : this.enemy.width),
+            y: this.enemy.y + this.enemy.height / 2 - 15,
+            width: this.range,
+            height: 30
+        }];
+        
+        this.createThrustParticles();
+        
+        if (audioManager) {
+            audioManager.playAttackSound('thrust');
+        }
+    }
+    
+    createThrustParticles() {
+        const startX = this.enemy.x + this.enemy.width / 2;
+        const startY = this.enemy.y + this.enemy.height / 2;
+        const direction = this.enemy.facingLeft ? -1 : 1;
+        
+        for (let i = 0; i < 6; i++) {
+            this.particles.push(new Particle(
+                startX + direction * 30,
+                startY + (Math.random() - 0.5) * 20,
+                direction * (200 + Math.random() * 100),
+                (Math.random() - 0.5) * 50,
+                0.25,
+                '#FFA500',
+                2
+            ));
+        }
+    }
+    
+    renderTelegraph(ctx) {
+        if (this.state === ATTACK_STATES.TELEGRAPH && this.telegraphGlow) {
+            ctx.save();
+            ctx.globalAlpha = this.telegraphGlow.intensity;
+            ctx.strokeStyle = this.telegraphGlow.color + this.telegraphGlow.intensity + ')';
+            ctx.lineWidth = 3;
+            
+            const centerX = this.enemy.x + this.enemy.width / 2;
+            const centerY = this.enemy.y + this.enemy.height / 2;
+            const direction = this.enemy.facingLeft ? -1 : 1;
+            
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + direction * this.range, centerY);
+            ctx.stroke();
+            
+            // Add arrowhead
+            const arrowX = centerX + direction * this.range;
+            ctx.beginPath();
+            ctx.moveTo(arrowX, centerY);
+            ctx.lineTo(arrowX - direction * 15, centerY - 8);
+            ctx.lineTo(arrowX - direction * 15, centerY + 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+    }
+}
+
+// AOE Circle Attack Class
+class AOECircleAttack extends AttackBase {
+    constructor(enemy, radius = 100) {
+        super(enemy, ATTACK_TYPES.AOE_CIRCLE, 30, radius, 1.2, 0.4, 0.3, 0.6);
+        this.radius = radius;
+        this.currentRadius = 0;
+        this.isParryable = false; // AOE attacks cannot be parried
+    }
+    
+    createTelegraphEffects() {
+        this.telegraphCircle = {
+            radius: 0,
+            maxRadius: this.radius,
+            color: 'rgba(255, 0, 0, 0.3)',
+            borderColor: 'rgba(255, 0, 0, 0.8)'
+        };
+    }
+    
+    updateTelegraph(deltaTime) {
+        const progress = this.stateTimer / (this.telegraphTime * this.chapterScaling.telegraphTime);
+        this.telegraphCircle.radius = this.radius * progress;
+    }
+    
+    executeAttack() {
+        const centerX = this.enemy.x + this.enemy.width / 2;
+        const centerY = this.enemy.y + this.enemy.height / 2;
+        
+        // Create circular hitbox
+        this.hitboxes = [{
+            x: centerX - this.radius,
+            y: centerY - this.radius,
+            width: this.radius * 2,
+            height: this.radius * 2,
+            isCircular: true,
+            centerX: centerX,
+            centerY: centerY,
+            radius: this.radius
+        }];
+        
+        this.createAOEParticles();
+        
+        // Trigger AOE tutorial
+        tutorialSystem.triggerAOETutorial();
+        
+        if (audioManager) {
+            audioManager.playAttackSound('aoe');
+        }
+    }
+    
+    createAOEParticles() {
+        const centerX = this.enemy.x + this.enemy.width / 2;
+        const centerY = this.enemy.y + this.enemy.height / 2;
+        const particleCount = 20;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = (i / particleCount) * Math.PI * 2;
+            const distance = this.radius * (0.7 + Math.random() * 0.3);
+            
+            this.particles.push(new Particle(
+                centerX + Math.cos(angle) * distance,
+                centerY + Math.sin(angle) * distance,
+                Math.cos(angle) * 100,
+                Math.sin(angle) * 100,
+                0.4,
+                '#FF4444',
+                4
+            ));
+        }
+    }
+    
+    checkPlayerHit() {
+        if (this.state !== ATTACK_STATES.EXECUTE) return false;
+        
+        return this.hitboxes.some(hitbox => {
+            if (hitbox.isCircular) {
+                const dx = (player.x + player.width / 2) - hitbox.centerX;
+                const dy = (player.y + player.height / 2) - hitbox.centerY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance <= hitbox.radius;
+            }
+            return false;
+        });
+    }
+    
+    renderTelegraph(ctx) {
+        if (this.state === ATTACK_STATES.TELEGRAPH && this.telegraphCircle) {
+            const centerX = this.enemy.x + this.enemy.width / 2;
+            const centerY = this.enemy.y + this.enemy.height / 2;
+            
+            ctx.save();
+            
+            // Fill circle
+            ctx.fillStyle = this.telegraphCircle.color;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, this.telegraphCircle.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Border circle
+            ctx.strokeStyle = this.telegraphCircle.borderColor;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+    }
+}
+
+// AOE Cone Attack Class
+class AOEConeAttack extends AttackBase {
+    constructor(enemy, angle = Math.PI / 3, range = 120) {
+        super(enemy, ATTACK_TYPES.AOE_CONE, 35, range, 1.0, 0.3, 0.25, 0.5);
+        this.coneAngle = angle;
+        this.isParryable = false; // AOE attacks cannot be parried
+    }
+    
+    createTelegraphEffects() {
+        this.telegraphCone = {
+            angle: 0,
+            maxAngle: this.coneAngle,
+            color: 'rgba(255, 100, 0, 0.3)',
+            borderColor: 'rgba(255, 100, 0, 0.8)'
+        };
+    }
+    
+    updateTelegraph(deltaTime) {
+        const progress = this.stateTimer / (this.telegraphTime * this.chapterScaling.telegraphTime);
+        this.telegraphCone.angle = this.coneAngle * progress;
+    }
+    
+    executeAttack() {
+        const centerX = this.enemy.x + this.enemy.width / 2;
+        const centerY = this.enemy.y + this.enemy.height / 2;
+        const direction = this.enemy.facingLeft ? Math.PI : 0;
+        
+        // Create cone hitbox (approximated as triangle)
+        const halfAngle = this.coneAngle / 2;
+        const x1 = centerX;
+        const y1 = centerY;
+        const x2 = centerX + Math.cos(direction - halfAngle) * this.range;
+        const y2 = centerY + Math.sin(direction - halfAngle) * this.range;
+        const x3 = centerX + Math.cos(direction + halfAngle) * this.range;
+        const y3 = centerY + Math.sin(direction + halfAngle) * this.range;
+        
+        this.hitboxes = [{
+            isCone: true,
+            centerX: centerX,
+            centerY: centerY,
+            direction: direction,
+            angle: this.coneAngle,
+            range: this.range,
+            vertices: [
+                { x: x1, y: y1 },
+                { x: x2, y: y2 },
+                { x: x3, y: y3 }
+            ]
+        }];
+        
+        this.createConeParticles();
+        
+        if (audioManager) {
+            audioManager.playAttackSound('cone');
+        }
+    }
+    
+    createConeParticles() {
+        const centerX = this.enemy.x + this.enemy.width / 2;
+        const centerY = this.enemy.y + this.enemy.height / 2;
+        const direction = this.enemy.facingLeft ? Math.PI : 0;
+        const particleCount = 15;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = direction + (Math.random() - 0.5) * this.coneAngle;
+            const distance = Math.random() * this.range;
+            
+            this.particles.push(new Particle(
+                centerX + Math.cos(angle) * distance,
+                centerY + Math.sin(angle) * distance,
+                Math.cos(angle) * 150,
+                Math.sin(angle) * 150,
+                0.35,
+                '#FF6600',
+                3
+            ));
+        }
+    }
+    
+    checkPlayerHit() {
+        if (this.state !== ATTACK_STATES.EXECUTE) return false;
+        
+        return this.hitboxes.some(hitbox => {
+            if (hitbox.isCone) {
+                const playerCenterX = player.x + player.width / 2;
+                const playerCenterY = player.y + player.height / 2;
+                
+                // Check if player is within cone
+                const dx = playerCenterX - hitbox.centerX;
+                const dy = playerCenterY - hitbox.centerY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > hitbox.range) return false;
+                
+                const playerAngle = Math.atan2(dy, dx);
+                const angleDiff = Math.abs(playerAngle - hitbox.direction);
+                const normalizedAngleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+                
+                return normalizedAngleDiff <= hitbox.angle / 2;
+            }
+            return false;
+        });
+    }
+    
+    renderTelegraph(ctx) {
+        if (this.state === ATTACK_STATES.TELEGRAPH && this.telegraphCone) {
+            const centerX = this.enemy.x + this.enemy.width / 2;
+            const centerY = this.enemy.y + this.enemy.height / 2;
+            const direction = this.enemy.facingLeft ? Math.PI : 0;
+            const halfAngle = this.telegraphCone.angle / 2;
+            
+            ctx.save();
+            
+            // Fill cone
+            ctx.fillStyle = this.telegraphCone.color;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.arc(centerX, centerY, this.range, direction - halfAngle, direction + halfAngle);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Border cone
+            ctx.strokeStyle = this.telegraphCone.borderColor;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+    }
+}
+
+// ===== PLAYER PARRY SYSTEM =====
+
+// Parry States
+const PARRY_STATES = {
+    READY: 'ready',
+    ACTIVE: 'active',
+    RECOVERY: 'recovery',
+    COOLDOWN: 'cooldown'
+};
+
+// Parry Results
+const PARRY_RESULTS = {
+    PERFECT: 'perfect',
+    GOOD: 'good',
+    FAILED: 'failed',
+    MISSED: 'missed'
+};
+
+class ParrySystem {
+    constructor(player) {
+        this.player = player;
+        this.state = PARRY_STATES.READY;
+        this.stateTimer = 0;
+        
+        // Chapter-based parry windows (in frames at 60fps)
+        this.parryWindows = {
+            1: { perfect: 3, good: 12, total: 15 },
+            2: { perfect: 3, good: 10, total: 13 },
+            3: { perfect: 2, good: 8, total: 10 },
+            4: { perfect: 2, good: 8, total: 10 },
+            5: { perfect: 2, good: 6, total: 8 }
+        };
+        
+        // Timing constants (in seconds)
+        this.activeTime = 0.25;    // How long parry window stays open
+        this.recoveryTime = 0.2;   // Recovery after parry attempt
+        this.cooldownTime = 0.1;   // Cooldown before next parry
+        
+        // Parry effects
+        this.parryEffects = [];
+        this.lastParryResult = null;
+        this.parryStreak = 0;
+        this.totalParries = 0;
+        this.successfulParries = 0;
+        
+        // Riposte system
+        this.riposteWindow = 0;
+        this.riposteWindowDuration = 1.0; // 1 second window after successful parry
+        this.riposteDamageMultiplier = 2.0; // Double damage for riposte attacks
+        this.canRiposte = false;
+        
+        // Visual feedback
+        this.parryGlow = {
+            intensity: 0,
+            color: '#FFD700',
+            duration: 0
+        };
+    }
+    
+    getCurrentParryWindow() {
+        const chapter = gameState.currentChapter || 1;
+        return this.parryWindows[chapter] || this.parryWindows[1];
+    }
+    
+    attemptParry() {
+        if (this.state !== PARRY_STATES.READY) return false;
+        
+        this.state = PARRY_STATES.ACTIVE;
+        this.stateTimer = 0;
+        this.createParryEffects();
+        
+        // Play parry attempt sound
+        if (audioManager) {
+            audioManager.playAttackSound('parry_attempt');
+        }
+        
+        return true;
+    }
+    
+    update(deltaTime) {
+        this.stateTimer += deltaTime;
+        
+        switch (this.state) {
+            case PARRY_STATES.ACTIVE:
+                if (this.stateTimer >= this.activeTime) {
+                    this.state = PARRY_STATES.RECOVERY;
+                    this.stateTimer = 0;
+                    
+                    // If no successful parry occurred, it's a missed parry
+                    if (this.lastParryResult === null) {
+                        this.handleParryResult(PARRY_RESULTS.MISSED);
+                    }
+                }
+                break;
+                
+            case PARRY_STATES.RECOVERY:
+                if (this.stateTimer >= this.recoveryTime) {
+                    this.state = PARRY_STATES.COOLDOWN;
+                    this.stateTimer = 0;
+                }
+                break;
+                
+            case PARRY_STATES.COOLDOWN:
+                if (this.stateTimer >= this.cooldownTime) {
+                    this.state = PARRY_STATES.READY;
+                    this.stateTimer = 0;
+                    this.lastParryResult = null;
+                }
+                break;
+        }
+        
+        // Update riposte window
+        if (this.riposteWindow > 0) {
+            this.riposteWindow -= deltaTime;
+            if (this.riposteWindow <= 0) {
+                this.canRiposte = false;
+            }
+        }
+        
+        this.updateEffects(deltaTime);
+    }
+    
+    checkParryAgainstAttack(attack) {
+        if (this.state !== PARRY_STATES.ACTIVE) return false;
+        if (!attack || !attack.isParryable) return false;
+        if (attack.state !== ATTACK_STATES.EXECUTE) return false;
+        
+        // Check if attack is hitting player
+        if (!attack.checkPlayerHit()) return false;
+        
+        // Determine parry quality based on timing
+        const frameTime = 1/60; // 60 FPS
+        const parryFrames = Math.floor(this.stateTimer / frameTime);
+        const window = this.getCurrentParryWindow();
+        
+        let result;
+        if (parryFrames <= window.perfect) {
+            result = PARRY_RESULTS.PERFECT;
+        } else if (parryFrames <= window.good) {
+            result = PARRY_RESULTS.GOOD;
+        } else {
+            result = PARRY_RESULTS.FAILED;
+        }
+        
+        this.handleParryResult(result, attack);
+        
+        // Trigger tutorial for perfect parry
+        if (result === PARRY_RESULTS.PERFECT) {
+            tutorialSystem.triggerPerfectParryTutorial();
+        }
+        
+        // Play parry sound based on quality
+        if (audioManager) {
+            const soundQuality = result === PARRY_RESULTS.PERFECT ? 'perfect' : 
+                                result === PARRY_RESULTS.GOOD ? 'good' : 'failed';
+            if (audioManager.playParrySound) {
+                audioManager.playParrySound(soundQuality);
+            }
+        }
+        
+        return result !== PARRY_RESULTS.FAILED;
+    }
+    
+    handleParryResult(result, attack = null) {
+        this.lastParryResult = result;
+        this.totalParries++;
+        
+        switch (result) {
+            case PARRY_RESULTS.PERFECT:
+                this.successfulParries++;
+                this.parryStreak++;
+                this.grantParryRewards(result, attack);
+                this.createParrySuccessEffects('perfect');
+                // Enable riposte window
+                this.riposteWindow = this.riposteWindowDuration;
+                this.canRiposte = true;
+                tutorialSystem.triggerRiposteTutorial();
+                if (audioManager) audioManager.playAttackSound('parry_perfect');
+                break;
+                
+            case PARRY_RESULTS.GOOD:
+                this.successfulParries++;
+                this.parryStreak++;
+                this.grantParryRewards(result, attack);
+                this.createParrySuccessEffects('good');
+                // Enable shorter riposte window for good parries
+                this.riposteWindow = this.riposteWindowDuration * 0.7;
+                this.canRiposte = true;
+                if (audioManager) audioManager.playAttackSound('parry_good');
+                break;
+                
+            case PARRY_RESULTS.FAILED:
+                this.parryStreak = 0;
+                this.createParryFailEffects();
+                if (audioManager) audioManager.playAttackSound('parry_fail');
+                break;
+                
+            case PARRY_RESULTS.MISSED:
+                this.parryStreak = 0;
+                break;
+        }
+        
+        // Update player vulnerability and stamina penalties
+        if (result === PARRY_RESULTS.FAILED) {
+            this.player.vulnerabilityTime = 0.5; // Extra vulnerability after failed parry
+            this.player.useStamina(20); // Extra stamina penalty for failed parry
+        } else if (result === PARRY_RESULTS.MISSED) {
+            this.player.useStamina(5); // Small penalty for missed parry
+        }
+    }
+    
+    grantParryRewards(result, attack) {
+        let soulReward = 0;
+        let damageBoostDuration = 0;
+        
+        switch (result) {
+            case PARRY_RESULTS.PERFECT:
+                soulReward = 15 + (this.parryStreak * 2);
+                damageBoostDuration = 3.0;
+                break;
+            case PARRY_RESULTS.GOOD:
+                soulReward = 10 + this.parryStreak;
+                damageBoostDuration = 2.0;
+                break;
+        }
+        
+        // Grant soul reward
+        if (soulReward > 0) {
+            gameState.souls += soulReward;
+            this.createSoulRewardEffect(soulReward);
+        }
+        
+        // Grant damage boost
+        if (damageBoostDuration > 0) {
+            this.player.damageBoost = {
+                multiplier: result === PARRY_RESULTS.PERFECT ? 1.5 : 1.25,
+                duration: damageBoostDuration
+            };
+        }
+        
+        // Stagger enemy
+        if (attack && attack.enemy) {
+            attack.enemy.stagger(result === PARRY_RESULTS.PERFECT ? 1.5 : 1.0);
+        }
+    }
+    
+    createParryEffects() {
+        this.parryGlow = {
+            intensity: 1.0,
+            color: '#FFD700',
+            duration: this.activeTime
+        };
+    }
+    
+    createParrySuccessEffects(quality) {
+        const color = quality === 'perfect' ? '#FFD700' : '#FFA500';
+        const particleCount = quality === 'perfect' ? 12 : 8;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = (i / particleCount) * Math.PI * 2;
+            const speed = quality === 'perfect' ? 200 : 150;
+            
+            this.parryEffects.push(new Particle(
+                this.player.x + this.player.width / 2,
+                this.player.y + this.player.height / 2,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed,
+                0.5,
+                color,
+                quality === 'perfect' ? 5 : 3
+            ));
+        }
+        
+        // Screen flash effect for perfect parries
+        if (quality === 'perfect') {
+            gameState.screenFlash = {
+                intensity: 0.3,
+                color: '#FFD700',
+                duration: 0.1
+            };
+        }
+    }
+    
+    createParryFailEffects() {
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            
+            this.parryEffects.push(new Particle(
+                this.player.x + this.player.width / 2,
+                this.player.y + this.player.height / 2,
+                Math.cos(angle) * 100,
+                Math.sin(angle) * 100,
+                0.3,
+                '#FF4444',
+                2
+            ));
+        }
+    }
+    
+    createSoulRewardEffect(amount) {
+        // Create floating text effect
+        this.parryEffects.push({
+            type: 'text',
+            x: this.player.x + this.player.width / 2,
+            y: this.player.y,
+            text: `+${amount} Souls`,
+            color: '#FFD700',
+            life: 1.0,
+            maxLife: 1.0,
+            velocityY: -50,
+            update: function(deltaTime) {
+                this.life -= deltaTime;
+                this.y += this.velocityY * deltaTime;
+                this.velocityY *= 0.95;
+            },
+            render: function(ctx) {
+                ctx.save();
+                ctx.globalAlpha = this.life / this.maxLife;
+                ctx.fillStyle = this.color;
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        });
+    }
+    
+    updateEffects(deltaTime) {
+        // Update parry glow
+        if (this.parryGlow.duration > 0) {
+            this.parryGlow.duration -= deltaTime;
+            this.parryGlow.intensity = Math.max(0, this.parryGlow.duration / this.activeTime);
+        }
+        
+        // Update parry effects
+        this.parryEffects = this.parryEffects.filter(effect => {
+            if (effect.update) {
+                effect.update(deltaTime);
+                return effect.life > 0;
+            } else {
+                effect.update(deltaTime);
+                return effect.life > 0;
+            }
+        });
+    }
+    
+    render(ctx) {
+        // Render parry glow
+        if (this.parryGlow.intensity > 0) {
+            ctx.save();
+            ctx.globalAlpha = this.parryGlow.intensity * 0.5;
+            ctx.strokeStyle = this.parryGlow.color;
+            ctx.lineWidth = 4;
+            ctx.strokeRect(
+                this.player.x - 5,
+                this.player.y - 5,
+                this.player.width + 10,
+                this.player.height + 10
+            );
+            ctx.restore();
+        }
+        
+        // Render parry effects
+        this.parryEffects.forEach(effect => {
+            if (effect.render) {
+                effect.render(ctx);
+            } else {
+                effect.render(ctx);
+            }
+        });
+        
+        // Render parry timing indicator (debug mode)
+        if (gameState.debugMode && this.state === PARRY_STATES.ACTIVE) {
+            const window = this.getCurrentParryWindow();
+            const frameTime = 1/60;
+            const currentFrame = Math.floor(this.stateTimer / frameTime);
+            
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, 150, 200, 60);
+            
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '12px Arial';
+            ctx.fillText(`Parry Frame: ${currentFrame}`, 15, 170);
+            ctx.fillText(`Perfect: 0-${window.perfect}`, 15, 185);
+            ctx.fillText(`Good: ${window.perfect+1}-${window.good}`, 15, 200);
+            
+            ctx.restore();
+        }
+    }
+    
+    getSuccessRate() {
+        return this.totalParries > 0 ? (this.successfulParries / this.totalParries) * 100 : 0;
+    }
+    
+    reset() {
+        this.state = PARRY_STATES.READY;
+        this.stateTimer = 0;
+        this.lastParryResult = null;
+        this.parryEffects = [];
+        this.parryGlow.intensity = 0;
+    }
+}
+
+// ========================================
+// GLOBAL INSTANCES (Will be created after class definitions)
+// ========================================
+
+// Global instances will be created at the end of the file
+
+
+
+// ========================================
+// GAME INSTANCES
+// ========================================
+
+// Game Objects
+let player = new Player(100, 300);
+let platforms = [
+    new Platform(0, canvas.height - 30, canvas.width, 30), // Ground
+    new Platform(200, 350, 200, 20),
+    new Platform(500, 300, 150, 20),
+    new Platform(100, 200, 100, 20)
+];
+let enemies = [
+    new Enemy(300, 320),
+    new Enemy(600, 270)
+];
+
+// ========================================
+// COLLISION DETECTION
+// ========================================
+
+function checkCollisions() {
+    // Player-Platform collisions
+    player.isOnGround = false;
+    
+    platforms.forEach(platform => {
+        if (player.x + player.width > platform.x &&
+            player.x < platform.x + platform.width &&
+            player.y + player.height > platform.y &&
+            player.y < platform.y + platform.height) {
+            
+            // Landing on top
+            if (player.velocityY > 0 && player.y + player.height - player.velocityY <= platform.y) {
+                player.y = platform.y - player.height;
+                player.velocityY = 0;
+                player.isOnGround = true;
+            }
+        }
+    });
+
+    // Enemy-Platform collisions (basic)
+    enemies.forEach(enemy => {
+        platforms.forEach(platform => {
+            if (enemy.x + enemy.width > platform.x &&
+                enemy.x < platform.x + platform.width &&
+                enemy.y + enemy.height > platform.y &&
+                enemy.y < platform.y + platform.height) {
+                
+                if (enemy.velocityY > 0 && enemy.y + enemy.height - enemy.velocityY <= platform.y) {
+                    enemy.y = platform.y - enemy.height;
+                    enemy.velocityY = 0;
+                }
+            }
+        });
+    });
+
+    // Combat collisions
+    const attackBox = player.getAttackBox();
+    if (attackBox) {
+        // Check player attack vs enemies
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            if (enemies[i].checkCollisionWithRect(attackBox)) {
+                if (enemies[i].takeDamage(1)) {
+                    // Create death explosion particles
+                    createEnemyDeathParticles(enemies[i].x + enemies[i].width/2, enemies[i].y + enemies[i].height/2);
+                    
+                    // Award souls with visual effect
+                    gameState.souls += 10;
+                    createSoulRewardParticles(enemies[i].x + enemies[i].width/2, enemies[i].y + enemies[i].height/2, 10);
+                    
+                    enemies.splice(i, 1); // Remove dead enemy
+                    gameState.enemiesDefeated++;
+                    
+                    // Trigger story events
+                    if (gameState.enemiesDefeated === 1) {
+                        triggerStoryEvent('firstEnemyDefeated');
+                    }
+                    if (enemies.length === 1) {
+                        triggerStoryEvent('halfEnemiesDefeated');
+                    }
+                    if (enemies.length === 0) {
+                        triggerStoryEvent('allEnemiesDefeated');
+                        // Victory after dialogue completes
+                        setTimeout(() => {
+                            if (!gameState.inDialogue) {
+                                gameState.current = 'victory';
+                            }
+                        }, 5000);
+                    }
+                }
+            }
+        }
+    }
+
+    // Check enemy damage to player
+    enemies.forEach(enemy => {
+        if (player.x + player.width > enemy.x &&
+            player.x < enemy.x + enemy.width &&
+            player.y + player.height > enemy.y &&
+            player.y < enemy.y + enemy.height) {
+            player.takeDamage(1);
+        }
+    });
+}
+
+// Input System
+const keys = {};
+const keyPressed = {};
+
+// Initialize Input Handlers
+function initializeInput() {
+    window.addEventListener('keydown', (e) => {
+        if (e.code) {
+            keys[e.code] = true;
+            keyPressed[e.code] = true;
+            
+            // Only prevent default for game keys
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
+                 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyZ', 'KeyJ', 'Escape'].includes(e.code)) {
+                e.preventDefault();
+            }
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.code) {
+            keys[e.code] = false;
+            
+            // Only prevent default for game keys
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
+                 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyZ', 'KeyJ', 'Escape'].includes(e.code)) {
+                e.preventDefault();
+            }
+        }
+    });
+
+    // Mouse click for menus
+    canvas.addEventListener('click', handleMouseClick);
+}
+
+// Mouse Click Handler
+function handleMouseClick(e) {
+    try {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // Validate click coordinates
+        if (x < 0 || x > canvas.width || y < 0 || y > canvas.height) {
+            return;
+        }
+        
+        // Enable audio on first click
+        audioManager.enableAudio();
+        
+        // Check sound button (always visible)
+        const soundButtonX = canvas.width - 50;
+        const soundButtonY = 30;
+        const distance = Math.sqrt((x - soundButtonX) ** 2 + (y - soundButtonY) ** 2);
+        if (distance <= 20) {
+            audioManager.toggleSound();
+            return;
+        }
+        
+        // Handle clicks based on current state
+        switch (gameState.current) {
+            case 'menu':
+                handleMenuClick(x, y);
+                break;
+            case 'paused':
+                handlePauseClick(x, y);
+                break;
+            case 'gameOver':
+                handleGameOverClick(x, y);
+                break;
+            case 'controls':
+                handleControlsClick(x, y);
+                break;
+            case 'victory':
+                handleVictoryClick(x, y);
+                break;
+        }
+    } catch (error) {
+        console.warn('Mouse click error:', error);
+    }
+}
+
+// Menu Click Logic
+function handleMenuClick(x, y) {
+    const buttonWidth = 200;
+    const buttonHeight = 50;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Start Game button
+    const startY = canvas.height / 2;
+            if (x >= buttonX && x <= buttonX + buttonWidth && 
+            y >= startY && y <= startY + buttonHeight) {
+            gameState.current = 'playing';
+            audioManager.playMusic();
+            triggerStoryEvent('gameStart'); // Start the story
+            return;
+        }
+    
+    // Controls button
+    const controlsY = canvas.height / 2 + 70;
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= controlsY && y <= controlsY + buttonHeight) {
+        gameState.current = 'controls';
+        return;
+    }
+}
+
+// Pause Menu Click Logic
+function handlePauseClick(x, y) {
+    const buttonWidth = 180;
+    const buttonHeight = 45;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Resume button
+    const resumeY = canvas.height / 2;
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= resumeY && y <= resumeY + buttonHeight) {
+        gameState.current = 'playing';
+        audioManager.playMusic();
+        return;
+    }
+    
+    // Main Menu button
+    const menuY = canvas.height / 2 + 60;
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= menuY && y <= menuY + buttonHeight) {
+        gameState.current = 'menu';
+        audioManager.pauseMusic();
+        resetGame();
+        return;
+    }
+}
+
+// Game Over Click Logic
+function handleGameOverClick(x, y) {
+    const buttonWidth = 180;
+    const buttonHeight = 45;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Restart button
+    const restartY = canvas.height / 2 + 50;
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= restartY && y <= restartY + buttonHeight) {
+        resetGame();
+        gameState.current = 'playing';
+        audioManager.playMusic();
+        return;
+    }
+    
+    // Main Menu button
+    const menuY = canvas.height / 2 + 110;
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= menuY && y <= menuY + buttonHeight) {
+        gameState.current = 'menu';
+        audioManager.pauseMusic();
+        resetGame();
+        return;
+    }
+}
+
+// Basic Game Loop
 let lastTime = 0;
-const frameTime = 1000 / TARGET_FPS;
+const frameTime = 1000 / GAME_CONFIG.TARGET_FPS;
+let deltaTime = 0;
 
-// Game loop
 function gameLoop(currentTime = 0) {
     try {
-        // Frame rate limiting
+        // Calculate deltaTime for frame-rate independent animations
+        deltaTime = currentTime - lastTime;
+        deltaTime = Math.min(deltaTime / 1000, 1/30); // Cap at 30fps minimum, convert to seconds
+        
+        // Frame rate control
         if (currentTime - lastTime < frameTime) {
             requestAnimationFrame(gameLoop);
             return;
         }
         lastTime = currentTime;
         
-        if (gameState.gameOver) {
-            drawGameOver();
-            requestAnimationFrame(gameLoop);
-            return;
+        // Update FPS counter
+        updateFPS(currentTime);
+
+        // Clear canvas
+        ctx.fillStyle = COLORS.BACKGROUND;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Handle different game states
+        switch (gameState.current) {
+            case 'menu':
+                drawMainMenu();
+                break;
+            case 'playing':
+                updateGame();
+                drawGame();
+                break;
+            case 'paused':
+                drawGame(); // Show game behind pause menu
+                drawPauseMenu();
+                break;
+            case 'gameOver':
+                drawGameOver();
+                break;
+            case 'controls':
+                drawControlsScreen();
+                break;
+            case 'victory':
+                drawVictoryScreen();
+                break;
+            default:
+                // Fallback to menu if unknown state
+                gameState.current = 'menu';
+                drawMainMenu();
         }
         
-        if (gameState.paused) {
-            drawPaused();
-            requestAnimationFrame(gameLoop);
-            return;
-        }
-    
-    // Clear canvas
-    ctx.fillStyle = COLORS.BACKGROUND_1;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw background
-    drawBackground();
-    
-    // Update story and dialogue
-    storyManager.updateChapterBackground();
-    dialogueSystem.update();
-    
-    // Update visual effects
-    updateVisualEffects();
-    
-    // Only handle game input if not in dialogue
-    if (!gameState.inDialogue) {
-        // Handle player input
-        handleInput();
-        
-        // Update game objects
-        player.update(platforms);
-        
-        // Update enemies
-        for (let i = enemies.length - 1; i >= 0; i--) {
-            // Bounds checking to prevent array access errors
-            if (i < 0 || i >= enemies.length) continue;
-            
-            const isAlive = enemies[i].update(platforms, player);
-            if (!isAlive) {
-                enemies.splice(i, 1);
-                
-                // Check for story triggers when enemies are defeated
-                storyManager.triggerCurrentChapterEvents();
-            }
-        }
-    } else {
-        // Handle dialogue input when in dialogue mode
-        dialogueSystem.handleInput(keys);
-    }
-    
-    // Draw game objects
-    platforms.forEach(platform => platform.draw());
-    enemies.forEach(enemy => enemy.draw());
-    player.draw();
-    
-    // Draw UI
-    player.drawHUD();
-    
-    // Draw emotional inventory (based on Disco Elysium thought cabinet)
-    drawEmotionalInventory();
-    
-    // Draw visual effects
-    drawVisualEffects();
-    
-    // Draw sound button
-    audioManager.drawSoundButton();
-    
-    // Draw dialogue last (on top of everything)
-    dialogueSystem.draw();
-    
-    // Check for story triggers based on game state
-    if (!gameState.inDialogue) {
-        storyManager.triggerCurrentChapterEvents();
-    }
-    
-        // Continue game loop
+        // Draw debug info (F12 to toggle)
+        drawDebugInfo();
+
+        // Reset key pressed flags
+        Object.keys(keyPressed).forEach(key => keyPressed[key] = false);
+
         requestAnimationFrame(gameLoop);
     } catch (error) {
-        console.error("Game loop error:", error);
-        // Try to continue the game loop despite errors
+        console.error('Game loop error:', error);
+        // Graceful continuation
         requestAnimationFrame(gameLoop);
     }
 }
 
-function handleInput() {
-    // Movement
-    player.velocityX = 0;
+// Main Menu
+function drawMainMenu() {
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText("THORNE'S JOURNEY", canvas.width / 2, canvas.height / 2 - 100);
     
-    if (keys['ArrowLeft'] || keys['KeyA']) {
-        player.velocityX = -PLAYER_SPEED;
-        player.facingRight = false;
-    }
-    if (keys['ArrowRight'] || keys['KeyD']) {
-        player.velocityX = PLAYER_SPEED;
-        player.facingRight = true;
-    }
+    ctx.font = '24px Arial';
+    ctx.fillText('A Dark Adventure', canvas.width / 2, canvas.height / 2 - 60);
     
-    // Jump - only if not just exiting dialogue
-    if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && !player.jumpKeyPressed && !keys.spacePressed) {
-        player.jump();
-        player.jumpKeyPressed = true;
-    }
-    if (!(keys['ArrowUp'] || keys['KeyW'] || keys['Space'])) {
-        player.jumpKeyPressed = false;
-    }
+    const buttonWidth = 200;
+    const buttonHeight = 50;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
     
-    // Attack
-    if (keys['KeyZ'] || keys['KeyJ']) {
-        player.attack();
-    }
+    // Start Game button
+    const startY = canvas.height / 2;
+    ctx.fillStyle = COLORS.UI_ACCENT;
+    ctx.fillRect(buttonX, startY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '20px Arial';
+    ctx.fillText('START GAME', canvas.width / 2, startY + 30);
     
-    // Dash
-    if ((keys['KeyX'] || keys['KeyK']) && !player.dashKeyPressed) {
-        player.dash();
-        player.dashKeyPressed = true;
-    }
-    if (!(keys['KeyX'] || keys['KeyK'])) {
-        player.dashKeyPressed = false;
-    }
+    // Controls button
+    const controlsY = canvas.height / 2 + 70;
+    ctx.fillStyle = '#444444';
+    ctx.fillRect(buttonX, controlsY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.fillText('CONTROLS', canvas.width / 2, controlsY + 30);
     
-    // Time Slow Ability
-    if ((keys['KeyC'] || keys['KeyL']) && !player.timeSlowKeyPressed) {
-        player.activateTimeSlow();
-        player.timeSlowKeyPressed = true;
+    drawSoundButton();
+}
+
+// Game Update Function
+function updateGame() {
+    // Handle pause
+    if (keyPressed['Escape']) {
+        gameState.current = gameState.current === 'paused' ? 'playing' : 'paused';
+        if (gameState.current === 'paused') {
+            audioManager.pauseMusic();
+        } else {
+            audioManager.playMusic();
+        }
     }
-    if (!(keys['KeyC'] || keys['KeyL'])) {
-        player.timeSlowKeyPressed = false;
-    }
-    
-    // Pause
-    if (keys['Escape'] && !gameState.escapeKeyPressed) {
-        gameState.paused = !gameState.paused;
-        gameState.escapeKeyPressed = true;
-    }
-    if (!keys['Escape']) {
-        gameState.escapeKeyPressed = false;
+
+    // Only update game objects when not paused
+    if (gameState.current === 'playing') {
+        // Handle dialogue input first
+        if (gameState.inDialogue) {
+            dialogueSystem.handleInput();
+        } else {
+            // Only update game when not in dialogue
+            player.update();
+            enemies.forEach(enemy => enemy.update());
+            checkCollisions();
+        }
+        
+        // Always update visual effects and dialogue
+        updateParticles();
+        dialogueSystem.update();
+        
+        // Update tutorial system
+        tutorialSystem.update(deltaTime);
+        
+        // Check chapter progression
+        chapterManager.checkChapterProgression();
     }
 }
 
-function drawBackground() {
-    // Draw some parallax background elements
-    ctx.fillStyle = COLORS.BACKGROUND_2;
+function drawGame() {
+    // Draw enhanced background
+    drawGameBackground();
     
-    // Distant mountains/structures
-    for (let i = 0; i < 5; i++) {
-        const width = 150 + Math.random() * 100;
-        const height = 100 + Math.random() * 200;
-        const x = (i * 200) % canvas.width;
-        const y = canvas.height - height;
-        
-        ctx.beginPath();
-        ctx.moveTo(x, canvas.height);
-        ctx.lineTo(x + width / 2, y);
-        ctx.lineTo(x + width, canvas.height);
-        ctx.fill();
+    // Draw platforms
+    platforms.forEach(platform => platform.draw());
+    
+    // Draw enemies
+    enemies.forEach(enemy => enemy.draw());
+    
+    // Draw player
+    player.draw();
+    
+    // Draw particles
+    drawParticles();
+    
+    // Draw simple HUD
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Health: ${player.health}/${player.maxHealth}`, 20, 30);
+    
+    // Draw health bars
+    for (let i = 0; i < player.maxHealth; i++) {
+        ctx.fillStyle = i < player.health ? COLORS.HEALTH : '#333333';
+        ctx.fillRect(20 + i * 25, 40, 20, 15);
     }
+    
+    // Draw stamina bar
+    const staminaBarWidth = 200;
+    const staminaBarHeight = 15;
+    const staminaX = 20;
+    const staminaY = 65;
+    
+    // Stamina text
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    const staminaText = player.isExhausted ? 'Exhausted!' : `Stamina: ${Math.floor(player.stamina)}/${player.maxStamina}`;
+    ctx.fillText(staminaText, staminaX, staminaY - 3);
+    
+    // Stamina bar background
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(staminaX, staminaY, staminaBarWidth, staminaBarHeight);
+    
+    // Stamina bar fill
+    const staminaPercentage = player.getStaminaPercentage();
+    let staminaColor = '#4CAF50'; // Green
+    if (staminaPercentage < 0.3) {
+        staminaColor = '#FF9800'; // Orange when low
+    }
+    if (player.isExhausted) {
+        staminaColor = '#F44336'; // Red when exhausted
+    }
+    
+    ctx.fillStyle = staminaColor;
+    ctx.fillRect(staminaX, staminaY, staminaBarWidth * staminaPercentage, staminaBarHeight);
+    
+    // Stamina bar border
+    ctx.strokeStyle = '#666666';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(staminaX, staminaY, staminaBarWidth, staminaBarHeight);
+    
+    // Draw chapter display
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(updateChapterDisplay(), canvas.width / 2, 25);
+    
+    // Draw enemy counter
+    ctx.textAlign = 'right';
+    ctx.fillText(`Enemies: ${enemies.length}`, canvas.width - 20, 70);
+    
+    // Draw sound button
+    drawSoundButton();
+    
+    // Draw dialogue on top of everything
+    dialogueSystem.draw();
+    
+    // Draw tutorial system
+    tutorialSystem.draw(ctx);
+    
+    // Draw screen flash effects
+    if (gameState.screenFlash && gameState.screenFlash.duration > 0) {
+        ctx.save();
+        ctx.globalAlpha = gameState.screenFlash.intensity * (gameState.screenFlash.duration / 0.1);
+        ctx.fillStyle = gameState.screenFlash.color;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        
+        gameState.screenFlash.duration -= deltaTime;
+        if (gameState.screenFlash.duration <= 0) {
+            gameState.screenFlash = null;
+        }
+    }
+}
+
+function drawGameBackground() {
+    // Base gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, COLORS.BACKGROUND);
+    gradient.addColorStop(1, COLORS.BACKGROUND_ACCENT);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add atmospheric particles
+    const time = Date.now() * 0.001;
+    for (let i = 0; i < 20; i++) {
+        const x = (i * 40 + Math.sin(time + i) * 10) % canvas.width;
+        const y = (i * 30 + Math.cos(time * 0.7 + i) * 20) % canvas.height;
+        const alpha = 0.1 + Math.sin(time + i) * 0.05;
+        
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = COLORS.BACKGROUND_PARTICLE;
+        ctx.beginPath();
+        ctx.arc(x, y, 1 + Math.sin(time + i) * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+function drawSoundButton() {
+    const buttonX = canvas.width - 50;
+    const buttonY = 30;
+    const buttonRadius = 20;
+    
+    // Button background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.arc(buttonX, buttonY, buttonRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Sound icon
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(audioManager.soundEnabled ? '🔊' : '🔇', buttonX, buttonY + 5);
+}
+
+function drawPauseMenu() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 60);
+    
+    const buttonWidth = 180;
+    const buttonHeight = 45;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Resume button
+    const resumeY = canvas.height / 2;
+    ctx.fillStyle = COLORS.UI_ACCENT;
+    ctx.fillRect(buttonX, resumeY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '18px Arial';
+    ctx.fillText('RESUME', canvas.width / 2, resumeY + 25);
+    
+    // Main Menu button
+    const menuY = canvas.height / 2 + 60;
+    ctx.fillStyle = '#444444';
+    ctx.fillRect(buttonX, menuY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.fillText('MAIN MENU', canvas.width / 2, menuY + 25);
+    
+    drawSoundButton();
 }
 
 function drawGameOver() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = COLORS.HEALTH;
     ctx.font = '48px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('SANITY LOST', canvas.width / 2, canvas.height / 2 - 40);
+    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
     
-    // Display current chapter
-    ctx.font = '24px Arial';
-    let chapterName = "";
-    switch(gameState.currentChapter) {
-        case CHAPTERS.INTRO: chapterName = "Prologue"; break;
-        case CHAPTERS.ASH_CHAPEL: chapterName = "Chapter 1: Ash Chapel"; break;
-        case CHAPTERS.BRIDGE: chapterName = "Chapter 2: Bridge of Forgotten Names"; break;
-        case CHAPTERS.WHISPERING_ROOM: chapterName = "Chapter 3: The Whispering Room"; break;
-        case CHAPTERS.EIDOLON_TREE: chapterName = "Chapter 4: Eidolon Tree"; break;
-        case CHAPTERS.VOICE_MANIFESTATION: chapterName = "Chapter 5: Voice Manifestation"; break;
-        case CHAPTERS.LAMENT_GATE: chapterName = "Chapter 6: The Lament Gate"; break;
-        case CHAPTERS.FOLDED_THRONE: chapterName = "Final Chapter: The Folded Throne"; break;
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '20px Arial';
+    ctx.fillText('Your sanity has been consumed...', canvas.width / 2, canvas.height / 2);
+    
+    const buttonWidth = 180;
+    const buttonHeight = 45;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Restart button
+    const restartY = canvas.height / 2 + 50;
+    ctx.fillStyle = COLORS.UI_ACCENT;
+    ctx.fillRect(buttonX, restartY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '18px Arial';
+    ctx.fillText('TRY AGAIN', canvas.width / 2, restartY + 25);
+    
+    // Main Menu button
+    const menuY = canvas.height / 2 + 110;
+    ctx.fillStyle = '#444444';
+    ctx.fillRect(buttonX, menuY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.fillText('MAIN MENU', canvas.width / 2, menuY + 25);
+    
+    drawSoundButton();
+}
+
+function drawControlsScreen() {
+    ctx.fillStyle = COLORS.BACKGROUND;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('CONTROLS', canvas.width / 2, 80);
+    
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'left';
+    const startX = 150;
+    let currentY = 150;
+    const lineHeight = 35;
+    
+    const controls = [
+        'MOVEMENT: A/D or ← →',
+        'JUMP: W or ↑ or SPACE',
+        'ATTACK: Z or J',
+        'PARRY: Q',
+        'PAUSE: ESC',
+        '',
+        'STAMINA SYSTEM:',
+        '• Actions consume stamina',
+        '• Exhaustion slows movement',
+        '• Stamina regenerates over time',
+        '',
+        'OBJECTIVE:',
+        '• Defeat all enemies to progress',
+        '• Master parrying to survive',
+        '• Manage your stamina wisely'
+    ];
+    
+    controls.forEach(control => {
+        if (control === '') {
+            currentY += lineHeight / 2;
+        } else if (control.startsWith('•')) {
+            ctx.fillStyle = COLORS.UI_ACCENT;
+            ctx.fillText(control, startX + 20, currentY);
+            currentY += lineHeight;
+        } else if (control === 'OBJECTIVE:') {
+            ctx.fillStyle = COLORS.UI_ACCENT;
+            ctx.font = '20px Arial';
+            ctx.fillText(control, startX, currentY);
+            ctx.font = '18px Arial';
+            currentY += lineHeight;
+        } else {
+            ctx.fillStyle = COLORS.UI_TEXT;
+            ctx.fillText(control, startX, currentY);
+            currentY += lineHeight;
+        }
+    });
+    
+    // Back button
+    const buttonWidth = 150;
+    const buttonHeight = 40;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    const buttonY = canvas.height - 80;
+    
+    ctx.fillStyle = COLORS.UI_ACCENT;
+    ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('BACK', canvas.width / 2, buttonY + 25);
+    
+    drawSoundButton();
+}
+
+function handleControlsClick(x, y) {
+    // Back button
+    const buttonWidth = 150;
+    const buttonHeight = 40;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    const buttonY = canvas.height - 80;
+    
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= buttonY && y <= buttonY + buttonHeight) {
+        gameState.current = 'menu';
     }
-    ctx.fillText(chapterName, canvas.width / 2, canvas.height / 2);
+}
+
+function drawVictoryScreen() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    ctx.fillText('The Verge has consumed your sanity', canvas.width / 2, canvas.height / 2 + 30);
-    ctx.fillText('Press R to continue your journey', canvas.width / 2, canvas.height / 2 + 70);
+    ctx.fillStyle = COLORS.UI_ACCENT;
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('CHAPTER COMPLETE', canvas.width / 2, canvas.height / 2 - 80);
     
-    // Draw sound button
-    audioManager.drawSoundButton();
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '24px Arial';
+    ctx.fillText('The Ash Chapel has been cleansed', canvas.width / 2, canvas.height / 2 - 30);
+    ctx.font = '18px Arial';
+    ctx.fillText('But Thorne\'s journey is far from over...', canvas.width / 2, canvas.height / 2);
     
-    // Restart game on R key
-    if (keys['KeyR']) {
+    const buttonWidth = 180;
+    const buttonHeight = 45;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Continue button (placeholder for future chapters)
+    const continueY = canvas.height / 2 + 50;
+    ctx.fillStyle = '#666666';
+    ctx.fillRect(buttonX, continueY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.font = '16px Arial';
+    ctx.fillText('CONTINUE (Coming Soon)', canvas.width / 2, continueY + 25);
+    
+    // Main Menu button
+    const menuY = canvas.height / 2 + 110;
+    ctx.fillStyle = COLORS.UI_ACCENT;
+    ctx.fillRect(buttonX, menuY, buttonWidth, buttonHeight);
+    ctx.fillStyle = COLORS.UI_TEXT;
+    ctx.fillText('MAIN MENU', canvas.width / 2, menuY + 25);
+    
+    drawSoundButton();
+}
+
+function handleVictoryClick(x, y) {
+    const buttonWidth = 180;
+    const buttonHeight = 45;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    
+    // Main Menu button
+    const menuY = canvas.height / 2 + 110;
+    if (x >= buttonX && x <= buttonX + buttonWidth && 
+        y >= menuY && y <= menuY + buttonHeight) {
+        gameState.current = 'menu';
+        audioManager.pauseMusic();
         resetGame();
     }
 }
 
-function drawPaused() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '48px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
-    
-    ctx.font = '24px Arial';
-    ctx.fillText('Press ESC to resume', canvas.width / 2, canvas.height / 2 + 30);
-    
-    // Draw sound button
-    audioManager.drawSoundButton();
-}
-
-function getCheckpointPosition() {
-    // Return appropriate spawn position based on current chapter and progress
-    switch(gameState.currentChapter) {
-        case CHAPTERS.INTRO:
-            return { x: canvas.width / 2, y: canvas.height / 2 };
-            
-        case CHAPTERS.ASH_CHAPEL:
-            if (gameState.chapterProgress >= 1) {
-                return { x: canvas.width * 0.4, y: canvas.height / 2 };
-            }
-            return { x: canvas.width / 4, y: canvas.height / 2 };
-            
-        case CHAPTERS.BRIDGE:
-            if (gameState.chapterProgress >= 1) {
-                return { x: canvas.width * 0.6, y: canvas.height / 2 };
-            }
-            return { x: canvas.width / 3, y: canvas.height / 2 };
-            
-        case CHAPTERS.WHISPERING_ROOM:
-            if (gameState.chapterProgress >= 1) {
-                return { x: canvas.width * 0.5, y: canvas.height / 2 };
-            }
-            return { x: canvas.width / 4, y: canvas.height / 2 };
-            
-        case CHAPTERS.EIDOLON_TREE:
-            if (gameState.chapterProgress >= 1) {
-                return { x: canvas.width * 0.6, y: canvas.height / 2 };
-            }
-            return { x: canvas.width / 3, y: canvas.height / 2 };
-            
-        default:
-            return { x: canvas.width / 2, y: canvas.height / 2 };
-    }
-}
-
+// Reset Game Function
 function resetGame() {
-    // Store current chapter and progress before reset
-    const currentChapter = gameState.currentChapter;
-    const chapterProgress = gameState.chapterProgress;
-    const emotionalInventory = { ...gameState.emotionalInventory };
-    const hasEncounteredKas = gameState.hasEncounteredKas;
-    const hasFoundMemoryPage = gameState.hasFoundMemoryPage;
+    player = new Player(100, 300);
+    enemies = [
+        new Enemy(300, 320),
+        new Enemy(600, 270)
+    ];
     
-    // Get checkpoint position based on chapter progress
-    const checkpoint = getCheckpointPosition();
-    
-    // Reset player at checkpoint position
-    player = new Player(checkpoint.x, checkpoint.y);
-    
-    // Reset game state but preserve story progress
-    gameState.gameOver = false;
-    gameState.paused = false;
+    // Reset story state
+    gameState.currentChapter = 1;  // Start at combat chapter 1
     gameState.inDialogue = false;
+    gameState.enemiesDefeated = 0;
     
-    // Restore chapter and progress
-    gameState.currentChapter = currentChapter;
-    gameState.chapterProgress = chapterProgress;
-    gameState.emotionalInventory = emotionalInventory;
-    gameState.hasEncounteredKas = hasEncounteredKas;
-    gameState.hasFoundMemoryPage = hasFoundMemoryPage;
-    
-    // Respawn enemies based on current chapter
-    storyManager.spawnChapterEnemies();
-    
-    // Reset player abilities
-    player.resetTimeSlowAbility();
-    
-    // Ensure music is playing if enabled
-    audioManager.playMusic();
+    // Clear dialogue
+    dialogueSystem.currentDialogue = null;
+    dialogueSystem.dialogueQueue = [];
 }
 
-function drawEmotionalInventory() {
-    // Draw emotional states at the top-right
-    const emotions = Object.entries(gameState.emotionalInventory);
-    ctx.font = '14px Arial';
-    ctx.textAlign = 'right';
-    
-    emotions.forEach((emotion, index) => {
-        const [type, value] = emotion;
-        let color;
-        
-        switch(type) {
-            case EMOTIONS.TRUTH:
-                color = '#AAAAFF';
-                break;
-            case EMOTIONS.REGRET:
-                color = '#AAFFAA';
-                break;
-            case EMOTIONS.FURY:
-                color = '#FFAAAA';
-                break;
-        }
-        
-        ctx.fillStyle = color;
-        ctx.fillText(`${type}: ${value}`, canvas.width - 20, 80 + index * 20);
-    });
-}
-
-// Start game
+// Initialize and Start Game
 function startGame() {
-    // Initialize audio
-    audioManager.init();
-    
-    // Start game loop
+    initializeInput();
+    audioManager.init(); // Initialize audio system
     gameLoop();
 }
 
-// Initialize and start game
+// Start the game when page loads
 startGame();
 
-// Visual effects
-let visualEffects = [];
+// Performance monitoring
+let frameCount = 0;
+let lastFpsTime = 0;
+let currentFps = 60;
 
-function createTimeSlowEffect() {
-    // Create a ripple effect
-    visualEffects.push({
-        type: 'timeSlow',
-        x: player.x + player.width / 2,
-        y: player.y + player.height / 2,
-        radius: 10,
-        maxRadius: 200,
-        duration: 30,
-        timer: 30,
-        color: 'rgba(136, 204, 255, 0.5)'
-    });
+function updateFPS(currentTime) {
+    frameCount++;
+    if (currentTime - lastFpsTime >= 1000) {
+        currentFps = frameCount;
+        frameCount = 0;
+        lastFpsTime = currentTime;
+    }
 }
 
-function updateVisualEffects() {
-    // Prevent memory leaks by limiting maximum effects
-    if (visualEffects.length > MAX_VISUAL_EFFECTS) {
-        visualEffects.splice(0, visualEffects.length - MAX_VISUAL_EFFECTS);
+function drawDebugInfo() {
+    // Only show in development (can be toggled)
+    if (keys['F12']) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(canvas.width - 150, 0, 150, 100);
+        
+        ctx.fillStyle = COLORS.UI_TEXT;
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`FPS: ${currentFps}`, canvas.width - 140, 20);
+        ctx.fillText(`Particles: ${particles.length}`, canvas.width - 140, 35);
+        ctx.fillText(`Enemies: ${enemies.length}`, canvas.width - 140, 50);
+        ctx.fillText(`Chapter: ${gameState.currentChapter}`, canvas.width - 140, 65);
+        ctx.fillText(`Stamina: ${Math.floor(player.stamina)}/${player.maxStamina}`, canvas.width - 140, 80);
+        ctx.fillText(`Exhausted: ${player.isExhausted}`, canvas.width - 140, 95);
+        ctx.fillText(`In Dialogue: ${gameState.inDialogue}`, canvas.width - 140, 110);
+    }
+}
+
+// ========================================
+// TUTORIAL SYSTEM
+// ========================================
+
+class TutorialSystem {
+    constructor() {
+        this.currentTutorial = null;
+        this.tutorialQueue = [];
+        this.tutorialTimer = 0;
+        this.tutorialDuration = 4.0; // 4 seconds per tutorial
+        this.hasShownTutorials = {
+            parry: false,
+            stamina: false,
+            aoe: false,
+            combo: false,
+            perfectParry: false
+        };
     }
     
-    for (let i = visualEffects.length - 1; i >= 0; i--) {
-        // Bounds checking
-        if (i < 0 || i >= visualEffects.length) continue;
+    showTutorial(type, message) {
+        if (this.hasShownTutorials[type]) return;
         
-        const effect = visualEffects[i];
-        effect.timer--;
+        this.currentTutorial = {
+            type: type,
+            message: message,
+            alpha: 0,
+            fadeIn: true
+        };
+        this.tutorialTimer = 0;
+        this.hasShownTutorials[type] = true;
+    }
+    
+    update(deltaTime) {
+        if (!this.currentTutorial) return;
         
-        if (effect.timer <= 0) {
-            visualEffects.splice(i, 1);
-            continue;
+        this.tutorialTimer += deltaTime;
+        
+        // Fade in/out animation
+        if (this.currentTutorial.fadeIn) {
+            this.currentTutorial.alpha = Math.min(1, this.tutorialTimer * 3);
+            if (this.currentTutorial.alpha >= 1) {
+                this.currentTutorial.fadeIn = false;
+            }
+        } else if (this.tutorialTimer >= this.tutorialDuration - 1) {
+            // Fade out in last second
+            this.currentTutorial.alpha = Math.max(0, 1 - (this.tutorialTimer - (this.tutorialDuration - 1)) * 3);
         }
         
-        // Update specific effect types
-        if (effect.type === 'timeSlow') {
-            effect.radius = effect.maxRadius * (1 - effect.timer / effect.duration);
+        // Remove tutorial after duration
+        if (this.tutorialTimer >= this.tutorialDuration) {
+            this.currentTutorial = null;
+            this.tutorialTimer = 0;
+        }
+    }
+    
+    draw(ctx) {
+        if (!this.currentTutorial) return;
+        
+        const tutorial = this.currentTutorial;
+        
+        // Tutorial background
+        ctx.save();
+        ctx.globalAlpha = tutorial.alpha * 0.9;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(50, canvas.height - 120, canvas.width - 100, 70);
+        
+        // Tutorial border
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(50, canvas.height - 120, canvas.width - 100, 70);
+        
+        // Tutorial text
+        ctx.globalAlpha = tutorial.alpha;
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TUTORIAL', canvas.width / 2, canvas.height - 100);
+        
+        ctx.fillStyle = COLORS.UI_TEXT;
+        ctx.font = '14px Arial';
+        this.wrapText(ctx, tutorial.message, canvas.width / 2, canvas.height - 80, canvas.width - 120, 16);
+        
+        ctx.restore();
+    }
+    
+    wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+        const words = text.split(' ');
+        let line = '';
+        let currentY = y;
+        
+        for (let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' ';
+            const metrics = ctx.measureText(testLine);
+            const testWidth = metrics.width;
+            
+            if (testWidth > maxWidth && n > 0) {
+                ctx.fillText(line, x, currentY);
+                line = words[n] + ' ';
+                currentY += lineHeight;
+            } else {
+                line = testLine;
+            }
+        }
+        ctx.fillText(line, x, currentY);
+    }
+    
+    // Tutorial triggers
+    triggerParryTutorial() {
+        this.showTutorial('parry', 'Press Q to parry incoming attacks! Time it right for maximum rewards.');
+    }
+    
+    triggerStaminaTutorial() {
+        this.showTutorial('stamina', 'Watch your stamina! Actions consume stamina. Rest to regenerate.');
+    }
+    
+    triggerAOETutorial() {
+        this.showTutorial('aoe', 'Red attacks cannot be parried! Move away from the danger zone.');
+    }
+    
+    triggerComboTutorial() {
+        this.showTutorial('combo', 'Enemy combo attack! Parry each attack in sequence for bonus rewards.');
+    }
+    
+    triggerPerfectParryTutorial() {
+        this.showTutorial('perfectParry', 'Perfect parry! Frame-perfect timing grants maximum souls and damage boost.');
+    }
+    
+    triggerChargeTutorial() {
+        this.showTutorial('charge', 'Enemy charge attack! Dodge or parry at the right moment to avoid being hit.');
+    }
+    
+    triggerGroundSlamTutorial() {
+        this.showTutorial('groundSlam', 'Ground slam incoming! The shockwave cannot be parried - move away from the danger zone!');
+    }
+    
+    triggerRiposteTutorial() {
+        this.showTutorial('riposte', 'Riposte window open! Attack now for double damage and enemy stagger!');
+    }
+}
+
+// ========================================
+// CHAPTER PROGRESSION SYSTEM
+// ========================================
+
+class ChapterManager {
+    constructor() {
+        this.chapterRequirements = {
+            1: { enemiesDefeated: 2, parrySuccessRate: 0 },
+            2: { enemiesDefeated: 3, parrySuccessRate: 40 },
+            3: { enemiesDefeated: 4, parrySuccessRate: 50 },
+            4: { enemiesDefeated: 5, parrySuccessRate: 60 },
+            5: { enemiesDefeated: 6, parrySuccessRate: 70 }
+        };
+        this.chapterUnlockMessages = {
+            2: "Chapter 2 Unlocked: Rhythm and Timing - Enemies now use thrust attacks!",
+            3: "Chapter 3 Unlocked: Spatial Awareness - Beware of area attacks!",
+            4: "Chapter 4 Unlocked: Combat Flow - Enemies can chain attacks together!",
+            5: "Chapter 5 Unlocked: Master of Arms - Face the ultimate challenge!"
+        };
+    }
+    
+    checkChapterProgression() {
+        const currentChapter = gameState.currentChapter;
+        const nextChapter = currentChapter + 1;
+        
+        if (nextChapter > 5) return; // Max chapter reached
+        
+        const requirements = this.chapterRequirements[nextChapter];
+        
+        // Check if requirements are met
+        const enemiesDefeated = gameState.enemiesDefeated || 0;
+        const parrySuccessRate = player.parrySystem.getSuccessRate();
+        
+        if (enemiesDefeated >= requirements.enemiesDefeated && 
+            parrySuccessRate >= requirements.parrySuccessRate) {
+            this.advanceChapter();
+        }
+    }
+    
+    advanceChapter() {
+        const oldChapter = gameState.currentChapter;
+        gameState.currentChapter++;
+        
+        // Mark previous chapter as completed
+        gameState.chapterProgress[oldChapter].completed = true;
+        gameState.chapterProgress[oldChapter].parrySuccessRate = player.parrySystem.getSuccessRate();
+        gameState.chapterProgress[oldChapter].enemiesDefeated = gameState.enemiesDefeated;
+        
+        // Show chapter unlock message
+        if (this.chapterUnlockMessages[gameState.currentChapter]) {
+            this.showChapterUnlock(gameState.currentChapter);
+        }
+        
+        // Reset enemies for new chapter
+        this.spawnChapterEnemies();
+        
+        // Update existing enemies with new attack types
+        enemies.forEach(enemy => {
+            enemy.attackTypes = enemy.getChapterAttackTypes();
+        });
+    }
+    
+    showChapterUnlock(chapter) {
+        // Create a special dialogue for chapter unlock
+        dialogueSystem.addDialogue("System", this.chapterUnlockMessages[chapter]);
+        
+        // Screen flash effect
+        gameState.screenFlash = {
+            intensity: 0.2,
+            color: '#FFD700',
+            duration: 0.5
+        };
+    }
+    
+    spawnChapterEnemies() {
+        // Add one more enemy each chapter (up to 5 total)
+        const targetEnemyCount = Math.min(2 + gameState.currentChapter - 1, 5);
+        
+        while (enemies.length < targetEnemyCount) {
+            const x = 200 + enemies.length * 150 + Math.random() * 100;
+            const y = 300 + Math.random() * 50;
+            enemies.push(new Enemy(x, y));
+        }
+    }
+    
+    getCurrentChapterInfo() {
+        const chapter = gameState.currentChapter;
+        const progress = gameState.chapterProgress[chapter];
+        return {
+            title: progress.title,
+            chapter: chapter,
+            requirements: this.chapterRequirements[chapter + 1] || null
+        };
+    }
+}
+
+// ========================================
+// ADVANCED ATTACK TYPES (PHASE 9 COMPLETION)
+// ========================================
+
+class ChargeAttack extends AttackBase {
+    constructor(enemy) {
+        const scaling = enemy.getChapterScaling();
+        super(
+            enemy, 
+            'charge',
+            25 * scaling.damage,
+            150,
+            1.0 * scaling.telegraphTime,
+            0.3,
+            0.5,
+            0.4
+        );
+        this.chargeSpeed = 8;
+        this.chargeDirection = enemy.x < player.x ? 1 : -1;
+        this.originalX = enemy.x;
+        this.chargeDistance = 200;
+        this.hasCharged = false;
+    }
+    
+    createTelegraphEffects() {
+        // Create direction indicator particles
+        for (let i = 0; i < 15; i++) {
+            const angle = this.chargeDirection > 0 ? 0 : Math.PI;
+            const speed = 2 + Math.random() * 3;
+            particles.push(new Particle(
+                this.enemy.x + this.enemy.width / 2,
+                this.enemy.y + this.enemy.height / 2,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed + (Math.random() - 0.5) * 2,
+                '#FF4444',
+                30,
+                3
+            ));
+        }
+    }
+    
+    executeAttack() {
+        if (!this.hasCharged) {
+            this.hasCharged = true;
+            audioManager.playAttackSound('charge');
+            this.createChargeParticles();
+        }
+        
+        // Move enemy during charge
+        const targetX = this.originalX + (this.chargeDistance * this.chargeDirection);
+        const distanceToTarget = Math.abs(targetX - this.enemy.x);
+        
+        if (distanceToTarget > 5) {
+            this.enemy.x += this.chargeSpeed * this.chargeDirection;
+            
+            // Check collision with player during charge
+            if (this.checkPlayerHit()) {
+                player.takeDamage(this.getScaledDamage());
+                this.createImpactParticles();
+            }
+        }
+    }
+    
+    createChargeParticles() {
+        // Dust cloud at start of charge
+        for (let i = 0; i < 10; i++) {
+            particles.push(new Particle(
+                this.enemy.x + Math.random() * this.enemy.width,
+                this.enemy.y + this.enemy.height,
+                (Math.random() - 0.5) * 4,
+                -Math.random() * 3,
+                '#8B4513',
+                40,
+                2 + Math.random() * 2
+            ));
+        }
+    }
+    
+    createImpactParticles() {
+        // Impact effects when charge hits
+        for (let i = 0; i < 8; i++) {
+            particles.push(new Particle(
+                player.x + player.width / 2,
+                player.y + player.height / 2,
+                (Math.random() - 0.5) * 6,
+                -Math.random() * 4,
+                '#FF6666',
+                30,
+                3
+            ));
+        }
+    }
+    
+    renderTelegraph(ctx) {
+        if (this.state !== 'telegraph' && this.state !== 'windup') return;
+        
+        ctx.save();
+        
+        // Draw charge path indicator
+        ctx.strokeStyle = '#FF4444';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 5]);
+        
+        const startX = this.enemy.x + this.enemy.width / 2;
+        const endX = startX + (this.chargeDistance * this.chargeDirection);
+        const y = this.enemy.y + this.enemy.height / 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+        
+        // Draw arrow at end
+        const arrowSize = 10;
+        const arrowX = endX;
+        ctx.fillStyle = '#FF4444';
+        ctx.beginPath();
+        if (this.chargeDirection > 0) {
+            ctx.moveTo(arrowX, y);
+            ctx.lineTo(arrowX - arrowSize, y - arrowSize / 2);
+            ctx.lineTo(arrowX - arrowSize, y + arrowSize / 2);
+        } else {
+            ctx.moveTo(arrowX, y);
+            ctx.lineTo(arrowX + arrowSize, y - arrowSize / 2);
+            ctx.lineTo(arrowX + arrowSize, y + arrowSize / 2);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+    }
+}
+
+class GroundSlamAttack extends AttackBase {
+    constructor(enemy) {
+        const scaling = enemy.getChapterScaling();
+        super(
+            enemy,
+            'groundSlam',
+            30 * scaling.damage,
+            120,
+            1.2 * scaling.telegraphTime,
+            0.4,
+            0.3,
+            0.5
+        );
+        this.shockwaveRadius = 0;
+        this.maxShockwaveRadius = 150;
+        this.shockwaveSpeed = 8;
+        this.hasSlammed = false;
+    }
+    
+    createTelegraphEffects() {
+        // Ground crack particles
+        for (let i = 0; i < 12; i++) {
+            const angle = (Math.PI * 2 / 12) * i;
+            particles.push(new Particle(
+                this.enemy.x + this.enemy.width / 2 + Math.cos(angle) * 20,
+                this.enemy.y + this.enemy.height,
+                Math.cos(angle) * 0.5,
+                -Math.random(),
+                '#8B4513',
+                60,
+                2
+            ));
+        }
+    }
+    
+    executeAttack() {
+        if (!this.hasSlammed) {
+            this.hasSlammed = true;
+            audioManager.playAttackSound('groundSlam');
+            this.createSlamParticles();
+        }
+        
+        // Expand shockwave
+        if (this.shockwaveRadius < this.maxShockwaveRadius) {
+            this.shockwaveRadius += this.shockwaveSpeed;
+            
+            // Check if player is in shockwave
+            const dx = player.x + player.width / 2 - (this.enemy.x + this.enemy.width / 2);
+            const dy = player.y + player.height / 2 - (this.enemy.y + this.enemy.height / 2);
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance <= this.shockwaveRadius && distance >= this.shockwaveRadius - this.shockwaveSpeed) {
+                player.takeDamage(this.getScaledDamage());
+                // Knockback effect
+                const knockbackForce = 8;
+                const angle = Math.atan2(dy, dx);
+                player.velocityX += Math.cos(angle) * knockbackForce;
+                player.velocityY = Math.min(player.velocityY, -6); // Upward knockback
+            }
+        }
+    }
+    
+    createSlamParticles() {
+        // Ground impact particles
+        for (let i = 0; i < 20; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 4;
+            particles.push(new Particle(
+                this.enemy.x + this.enemy.width / 2,
+                this.enemy.y + this.enemy.height,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed - 1,
+                '#654321',
+                50,
+                3 + Math.random() * 2
+            ));
+        }
+    }
+    
+    renderTelegraph(ctx) {
+        if (this.state !== 'telegraph' && this.state !== 'windup') return;
+        
+        ctx.save();
+        
+        // Draw expanding danger circle
+        const centerX = this.enemy.x + this.enemy.width / 2;
+        const centerY = this.enemy.y + this.enemy.height / 2;
+        
+        ctx.strokeStyle = '#FF4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        
+        // Animated expanding circle
+        const pulseRadius = this.maxShockwaveRadius * (0.7 + 0.3 * Math.sin(Date.now() * 0.01));
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Warning text
+        ctx.fillStyle = '#FF4444';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('GROUND SLAM!', centerX, centerY - 30);
+        
+        ctx.restore();
+    }
+    
+    render(ctx) {
+        super.render(ctx);
+        
+        // Draw shockwave during execution
+        if (this.state === 'execute' && this.shockwaveRadius > 0) {
+            ctx.save();
+            
+            const centerX = this.enemy.x + this.enemy.width / 2;
+            const centerY = this.enemy.y + this.enemy.height / 2;
+            
+            // Shockwave ring
+            ctx.strokeStyle = '#FF6666';
+            ctx.lineWidth = 3;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, this.shockwaveRadius, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.restore();
         }
     }
 }
 
-function drawVisualEffects() {
-    for (const effect of visualEffects) {
-        if (effect.type === 'timeSlow') {
-            // Draw time slow ripple
-            ctx.strokeStyle = effect.color;
-            ctx.lineWidth = 3;
-            ctx.globalAlpha = effect.timer / effect.duration;
-            ctx.beginPath();
-            ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
-        }
-    }
-} 
+// ========================================
+// CREATE GLOBAL INSTANCES AFTER ALL CLASSES ARE DEFINED
+// ========================================
+
+// Create tutorial system instance
+const tutorialSystem = new TutorialSystem();
+
+// Create chapter manager instance
+const chapterManager = new ChapterManager();
